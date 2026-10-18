@@ -18,7 +18,7 @@ import {
   MOCK_CIRCULATION,
   MOCK_FINES,
 } from './data/mockData';
-import { fetchAllBooks, fetchBookById, createBook } from './services/bookService';
+import { fetchAllBooks, fetchBookById, createBook, updateBook, deleteBook } from './services/bookService';
 
 import './App.css';
 
@@ -146,6 +146,24 @@ export default function App() {
       setModalType('inspect-book');
       setModalData(book);
     }
+  };
+
+  // Handler: Open Edit Book Modal (retrieves fresh book record from GET /api/books/{id})
+  const handleOpenEditBook = async (book) => {
+    try {
+      const freshBook = await fetchBookById(book.id);
+      setModalType('edit-book');
+      setModalData(freshBook);
+    } catch {
+      setModalType('edit-book');
+      setModalData(book);
+    }
+  };
+
+  // Handler: Open Delete Book Modal
+  const handleOpenDeleteBook = (book) => {
+    setModalType('delete-book');
+    setModalData(book);
   };
 
   // Handler: Open Collect Fine Modal
@@ -284,6 +302,38 @@ export default function App() {
     return savedBook;
   };
 
+  // Handler: Update Book (persists to MySQL via PUT /api/books/{id})
+  const handleSubmitEditBook = async (bookId, bookForm) => {
+    const updatedBook = await updateBook(bookId, bookForm);
+
+    // Refresh books list from backend
+    await loadBooks();
+
+    setModalType(null);
+    setToast({
+      title: 'Book Updated (MySQL)',
+      message: `"${updatedBook.title}" (ID #${updatedBook.id}) updated successfully in MySQL database.`,
+      type: 'success',
+    });
+    return updatedBook;
+  };
+
+  // Handler: Delete Book (persists to MySQL via DELETE /api/books/{id})
+  const handleSubmitDeleteBook = async (bookId) => {
+    await deleteBook(bookId);
+
+    // Refresh books list from backend
+    await loadBooks();
+
+    const bookTitle = modalData?.title ? `"${modalData.title}"` : `Book #${bookId}`;
+    setModalType(null);
+    setToast({
+      title: 'Book Deleted (MySQL)',
+      message: `${bookTitle} was removed from the MySQL catalogue.`,
+      type: 'success',
+    });
+  };
+
   // Handler: Collect Fine (in-memory demo)
   const handleSubmitCollectFine = (fineId) => {
     const fineRecord = fines.find((f) => f.id === fineId);
@@ -379,6 +429,8 @@ export default function App() {
               onRefresh={loadBooks}
               onAddBook={handleOpenAddBook}
               onInspectBook={handleInspectBook}
+              onEditBook={handleOpenEditBook}
+              onDeleteBook={handleOpenDeleteBook}
               searchQuery={searchQuery}
               onAddBookSubmit={handleSubmitAddBook}
             />
@@ -417,7 +469,11 @@ export default function App() {
         onClose={() => setModalType(null)}
         onSubmitIssue={handleSubmitIssue}
         onSubmitAddBook={handleSubmitAddBook}
+        onSubmitEditBook={handleSubmitEditBook}
+        onSubmitDeleteBook={handleSubmitDeleteBook}
         onSubmitCollectFine={handleSubmitCollectFine}
+        onSwitchToEdit={handleOpenEditBook}
+        onSwitchToDelete={handleOpenDeleteBook}
       />
 
       {/* Toast Feedback */}

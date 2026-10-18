@@ -24,6 +24,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 
+    @ExceptionHandler(BookNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleBookNotFoundException(BookNotFoundException ex, HttpServletRequest request) {
+        ErrorResponse errorResponse = new ErrorResponse(
+                Instant.now(),
+                HttpStatus.NOT_FOUND.value(),
+                HttpStatus.NOT_FOUND.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+    }
+
     @ExceptionHandler(DuplicateBookException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateBookException(DuplicateBookException ex, HttpServletRequest request) {
         ErrorResponse errorResponse = new ErrorResponse(

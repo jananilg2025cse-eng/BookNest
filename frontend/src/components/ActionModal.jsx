@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { CloseIcon, BookIcon, IssueReturnIcon, FinesIcon, CheckCircleIcon, AlertCircleIcon } from './Icons';
+import React, { useState, useEffect } from 'react';
+import { CloseIcon, BookIcon, IssueReturnIcon, FinesIcon, CheckCircleIcon, AlertCircleIcon, EditIcon, TrashIcon } from './Icons';
 
 export default function ActionModal({
   modalType,
@@ -7,7 +7,11 @@ export default function ActionModal({
   onClose,
   onSubmitIssue,
   onSubmitAddBook,
+  onSubmitEditBook,
+  onSubmitDeleteBook,
   onSubmitCollectFine,
+  onSwitchToEdit,
+  onSwitchToDelete,
 }) {
   // State for Quick Issue form
   const [issueForm, setIssueForm] = useState({
@@ -27,6 +31,38 @@ export default function ActionModal({
   });
   const [addBookLoading, setAddBookLoading] = useState(false);
   const [addBookError, setAddBookError] = useState(null);
+
+  // State for Edit Book form (connected to Spring Boot PUT /api/books/{id})
+  const [editForm, setEditForm] = useState({
+    id: '',
+    title: '',
+    author: '',
+    totalCopies: '',
+    availableCopies: '',
+  });
+  const [editBookLoading, setEditBookLoading] = useState(false);
+  const [editBookError, setEditBookError] = useState(null);
+
+  // State for Delete Book confirmation
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+
+  // Sync edit form whenever modal opens or modalData changes
+  useEffect(() => {
+    if (modalType === 'edit-book' && modalData) {
+      setEditForm({
+        id: modalData.id ?? '',
+        title: modalData.title ?? '',
+        author: modalData.author ?? '',
+        totalCopies: modalData.totalCopies ?? '',
+        availableCopies: modalData.availableCopies ?? '',
+      });
+      setEditBookError(null);
+    }
+    if (modalType === 'delete-book') {
+      setDeleteError(null);
+    }
+  }, [modalType, modalData]);
 
   if (!modalType) return null;
 
@@ -76,6 +112,63 @@ export default function ActionModal({
     }
   };
 
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    setEditBookError(null);
+
+    const copiesNum = parseInt(editForm.totalCopies, 10);
+    const availNum = parseInt(editForm.availableCopies, 10);
+
+    if (!editForm.title || !editForm.title.trim()) {
+      setEditBookError('Book title cannot be blank.');
+      return;
+    }
+    if (!editForm.author || !editForm.author.trim()) {
+      setEditBookError('Book author cannot be blank.');
+      return;
+    }
+    if (isNaN(copiesNum) || copiesNum <= 0) {
+      setEditBookError('Total copies count must be greater than zero.');
+      return;
+    }
+    if (isNaN(availNum) || availNum < 0) {
+      setEditBookError('Available copies cannot be negative.');
+      return;
+    }
+    if (availNum > copiesNum) {
+      setEditBookError('Available copies cannot exceed total copies.');
+      return;
+    }
+
+    try {
+      setEditBookLoading(true);
+      await onSubmitEditBook(modalData.id, {
+        id: modalData.id,
+        title: editForm.title.trim(),
+        author: editForm.author.trim(),
+        totalCopies: copiesNum,
+        availableCopies: availNum,
+      });
+    } catch (err) {
+      setEditBookError(err.message || 'Failed to update book.');
+    } finally {
+      setEditBookLoading(false);
+    }
+  };
+
+  const handleDeleteSubmit = async (e) => {
+    e.preventDefault();
+    setDeleteError(null);
+    try {
+      setDeleteLoading(true);
+      await onSubmitDeleteBook(modalData.id);
+    } catch (err) {
+      setDeleteError(err.message || 'Failed to delete book.');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
@@ -84,6 +177,8 @@ export default function ActionModal({
           <div className="modal-title-flex">
             {modalType === 'quick-issue' && <IssueReturnIcon size={22} className="modal-header-icon" />}
             {modalType === 'add-book' && <BookIcon size={22} className="modal-header-icon" />}
+            {modalType === 'edit-book' && <EditIcon size={22} className="modal-header-icon" />}
+            {modalType === 'delete-book' && <TrashIcon size={22} className="modal-header-icon" style={{ color: 'var(--rose-500)' }} />}
             {modalType === 'collect-fine' && <FinesIcon size={22} className="modal-header-icon" />}
             {modalType === 'inspect-book' && <BookIcon size={22} className="modal-header-icon" />}
 
@@ -91,12 +186,16 @@ export default function ActionModal({
               <h3 className="modal-title">
                 {modalType === 'quick-issue' && 'Issue Book to Student'}
                 {modalType === 'add-book' && 'Add New Book to Inventory'}
+                {modalType === 'edit-book' && 'Edit Book Details'}
+                {modalType === 'delete-book' && 'Delete Book from Catalogue'}
                 {modalType === 'collect-fine' && 'Process Fine Payment'}
                 {modalType === 'inspect-book' && 'Textbook Information'}
               </h3>
               <p className="modal-subtitle">
                 {modalType === 'quick-issue' && 'Demo circulation desk check-out simulation'}
                 {modalType === 'add-book' && 'Enter bibliographic data for campus stacks'}
+                {modalType === 'edit-book' && 'Update bibliographic and stack inventory in MySQL'}
+                {modalType === 'delete-book' && 'Confirm permanent removal from MySQL database'}
                 {modalType === 'collect-fine' && 'Simulate overdue penalty collection receipt'}
                 {modalType === 'inspect-book' && 'Live stack location and availability status'}
               </p>
@@ -293,6 +392,124 @@ export default function ActionModal({
             </form>
           )}
 
+          {modalType === 'edit-book' && (
+            <form onSubmit={handleEditSubmit} className="modal-form">
+              {editBookError && (
+                <div className="form-error-alert" role="alert">
+                  <AlertCircleIcon size={16} />
+                  <span>{editBookError}</span>
+                </div>
+              )}
+
+              <div className="form-group">
+                <label htmlFor="edit-book-id" className="form-label">
+                  Book ID (MySQL Primary Key)
+                </label>
+                <input
+                  id="edit-book-id"
+                  type="text"
+                  className="form-input mono"
+                  value={`#${editForm.id}`}
+                  disabled
+                  readOnly
+                />
+                <span className="form-field-hint">Book ID is immutable and cannot be changed.</span>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="edit-book-title" className="form-label">
+                  Book Title <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  id="edit-book-title"
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Database System Concepts"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  disabled={editBookLoading}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="edit-book-author" className="form-label">
+                  Author(s) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  id="edit-book-author"
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Abraham Silberschatz, Henry F. Korth"
+                  value={editForm.author}
+                  onChange={(e) => setEditForm({ ...editForm, author: e.target.value })}
+                  disabled={editBookLoading}
+                  required
+                />
+              </div>
+
+              <div className="form-row-2">
+                <div className="form-group">
+                  <label htmlFor="edit-book-copies" className="form-label">
+                    Total Copies <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    id="edit-book-copies"
+                    type="number"
+                    min="1"
+                    className="form-input"
+                    placeholder="e.g. 5"
+                    value={editForm.totalCopies}
+                    onChange={(e) => setEditForm({ ...editForm, totalCopies: e.target.value })}
+                    disabled={editBookLoading}
+                    required
+                  />
+                  <span className="form-field-hint">Total holdings inventory</span>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="edit-book-avail-copies" className="form-label">
+                    Available Copies <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    id="edit-book-avail-copies"
+                    type="number"
+                    min="0"
+                    max={editForm.totalCopies || undefined}
+                    className="form-input"
+                    placeholder="e.g. 3"
+                    value={editForm.availableCopies}
+                    onChange={(e) => setEditForm({ ...editForm, availableCopies: e.target.value })}
+                    disabled={editBookLoading}
+                    required
+                  />
+                  <span className="form-field-hint">Must not exceed total copies</span>
+                </div>
+              </div>
+
+              <div className="live-api-badge-box">
+                <span className="live-pulse-dot"></span>
+                <span>Target: <code>PUT http://localhost:8080/api/books/{editForm.id}</code> (Persisted in MySQL)</span>
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={onClose} disabled={editBookLoading}>
+                  Cancel
+                </button>
+                <button type="submit" id="save-edit-book-btn" className="btn btn-primary" disabled={editBookLoading}>
+                  {editBookLoading ? (
+                    <span>Saving Changes...</span>
+                  ) : (
+                    <>
+                      <CheckCircleIcon size={16} />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+
           {modalType === 'inspect-book' && modalData && (
             <div className="inspect-details">
               <div className="inspect-header-card">
@@ -332,6 +549,97 @@ export default function ActionModal({
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={onClose}>
                   Close
+                </button>
+                {onSwitchToDelete && (
+                  <button
+                    type="button"
+                    className="btn btn-danger-ghost"
+                    onClick={() => onSwitchToDelete(modalData)}
+                    title="Delete this book"
+                  >
+                    <TrashIcon size={16} />
+                    <span>Delete</span>
+                  </button>
+                )}
+                {onSwitchToEdit && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => onSwitchToEdit(modalData)}
+                  >
+                    <EditIcon size={16} />
+                    <span>Edit Book</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {modalType === 'delete-book' && modalData && (
+            <div className="inspect-details">
+              {deleteError && (
+                <div className="form-error-alert" role="alert">
+                  <AlertCircleIcon size={16} />
+                  <span>{deleteError}</span>
+                </div>
+              )}
+
+              <div className="delete-confirm-card">
+                <div className="delete-badge">Book #{modalData.id}</div>
+                <h4 className="inspect-book-title">{modalData.title}</h4>
+                <p className="inspect-book-author">By {modalData.author}</p>
+                <div className="inspect-grid" style={{ marginTop: '12px' }}>
+                  <div className="inspect-item">
+                    <span className="inspect-label">Available Copies</span>
+                    <span className="inspect-val font-semibold">{modalData.availableCopies}</span>
+                  </div>
+                  <div className="inspect-item">
+                    <span className="inspect-label">Total Inventory</span>
+                    <span className="inspect-val font-semibold">{modalData.totalCopies}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="delete-warning-banner" role="alert">
+                <AlertCircleIcon size={20} className="warning-icon" />
+                <div className="warning-content">
+                  <strong>Are you sure you want to delete this book?</strong>
+                  <p>This action cannot be undone. The book record will be permanently deleted from MySQL.</p>
+                </div>
+              </div>
+
+              <div className="live-api-badge-box">
+                <span className="live-pulse-dot" style={{ background: 'var(--rose-500)' }}></span>
+                <span>Target: <code>DELETE http://localhost:8080/api/books/{modalData.id}</code> (MySQL)</span>
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={onClose}
+                  disabled={deleteLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  id="confirm-delete-book-btn"
+                  className="btn btn-danger"
+                  onClick={handleDeleteSubmit}
+                  disabled={deleteLoading}
+                >
+                  {deleteLoading ? (
+                    <>
+                      <span className="btn-spinner"></span>
+                      <span>Deleting Book...</span>
+                    </>
+                  ) : (
+                    <>
+                      <TrashIcon size={16} />
+                      <span>Delete Book</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

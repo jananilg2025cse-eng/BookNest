@@ -1,5 +1,6 @@
 package com.booknest.backend.service;
 
+import com.booknest.backend.exception.BookNotFoundException;
 import com.booknest.backend.exception.BookValidationException;
 import com.booknest.backend.exception.DuplicateBookException;
 import com.booknest.backend.model.Book;
@@ -19,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -183,5 +185,90 @@ class BookServiceTest {
         assertTrue(result.isPresent());
         assertEquals("Book One", result.get().getTitle());
         verify(bookRepository, times(1)).findById(1);
+    }
+
+    @Test
+    @DisplayName("Should successfully update a valid book")
+    void testUpdateBook_Success() {
+        Book updatedData = new Book(null, "Clean Code 2nd Ed", "Robert C. Martin", 10, 8);
+        when(bookRepository.existsById(1)).thenReturn(true);
+        when(bookRepository.update(any(Book.class))).thenReturn(1);
+
+        Book result = bookService.updateBook(1, updatedData);
+
+        assertNotNull(result);
+        assertEquals(1, result.getId());
+        assertEquals("Clean Code 2nd Ed", result.getTitle());
+        assertEquals("Robert C. Martin", result.getAuthor());
+        assertEquals(10, result.getTotalCopies());
+        assertEquals(8, result.getAvailableCopies());
+        verify(bookRepository, times(1)).update(result);
+    }
+
+    @Test
+    @DisplayName("Should throw BookNotFoundException when updating non-existent book")
+    void testUpdateBook_NotFound() {
+        Book updatedData = new Book(null, "Title", "Author", 5, 5);
+        when(bookRepository.existsById(99)).thenReturn(false);
+
+        assertThrows(BookNotFoundException.class, () -> bookService.updateBook(99, updatedData));
+        verify(bookRepository, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("Should throw BookValidationException when updating with invalid fields")
+    void testUpdateBook_ValidationFailure() {
+        when(bookRepository.existsById(1)).thenReturn(true);
+
+        // Blank title
+        Book blankTitle = new Book(null, "   ", "Author", 5, 5);
+        assertThrows(BookValidationException.class, () -> bookService.updateBook(1, blankTitle));
+
+        // Blank author
+        Book blankAuthor = new Book(null, "Title", "   ", 5, 5);
+        assertThrows(BookValidationException.class, () -> bookService.updateBook(1, blankAuthor));
+
+        // Zero total copies
+        Book zeroTotal = new Book(null, "Title", "Author", 0, 0);
+        assertThrows(BookValidationException.class, () -> bookService.updateBook(1, zeroTotal));
+
+        // Negative available copies
+        Book negativeAvail = new Book(null, "Title", "Author", 5, -1);
+        assertThrows(BookValidationException.class, () -> bookService.updateBook(1, negativeAvail));
+
+        // Available copies exceeding total copies
+        Book exceedsTotal = new Book(null, "Title", "Author", 5, 6);
+        assertThrows(BookValidationException.class, () -> bookService.updateBook(1, exceedsTotal));
+
+        verify(bookRepository, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("Should successfully delete book when book exists")
+    void testDeleteBook_Success() {
+        when(bookRepository.existsById(1)).thenReturn(true);
+        when(bookRepository.deleteById(1)).thenReturn(1);
+
+        bookService.deleteBook(1);
+
+        verify(bookRepository, times(1)).deleteById(1);
+    }
+
+    @Test
+    @DisplayName("Should throw BookNotFoundException when deleting non-existent book")
+    void testDeleteBook_NotFound() {
+        when(bookRepository.existsById(99)).thenReturn(false);
+
+        assertThrows(BookNotFoundException.class, () -> bookService.deleteBook(99));
+        verify(bookRepository, never()).deleteById(anyInt());
+    }
+
+    @Test
+    @DisplayName("Should throw BookValidationException when ID is invalid for deletion")
+    void testDeleteBook_InvalidId() {
+        assertThrows(BookValidationException.class, () -> bookService.deleteBook(0));
+        assertThrows(BookValidationException.class, () -> bookService.deleteBook(-5));
+
+        verify(bookRepository, never()).deleteById(anyInt());
     }
 }
