@@ -471,6 +471,30 @@
   background: var(--emerald-500) !important;
 }
 
+.btn-danger {
+  background: var(--rose-600) !important;
+  color: var(--white) !important;
+  border: 1px solid var(--rose-600) !important;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.25);
+}
+.btn-danger:hover {
+  background: var(--rose-500) !important;
+  border-color: var(--rose-500) !important;
+  box-shadow: 0 4px 10px rgba(220, 38, 38, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-danger-ghost {
+  background: var(--rose-50);
+  color: var(--rose-600);
+  border: 1px solid var(--rose-200);
+}
+.btn-danger-ghost:hover {
+  background: var(--rose-600);
+  color: var(--white);
+  border-color: var(--rose-600);
+}
+
 .librarian-profile-pill {
   display: flex;
   align-items: center;
@@ -1065,6 +1089,13 @@
   color: var(--slate-600);
 }
 
+.table-actions-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .table-action-btn {
   font-size: 12px;
   font-weight: 600;
@@ -1077,12 +1108,24 @@
   align-items: center;
   gap: 5px;
   transition: all var(--transition-fast);
+  cursor: pointer;
 }
 
 .table-action-btn:hover {
   background: var(--blue-600);
   color: var(--white);
   border-color: var(--blue-600);
+}
+
+.table-action-btn.btn-edit-book {
+  background: var(--amber-50);
+  color: var(--amber-600);
+  border-color: var(--amber-100);
+}
+.table-action-btn.btn-edit-book:hover {
+  background: var(--amber-600);
+  color: var(--white);
+  border-color: var(--amber-600);
 }
 
 .table-action-btn.btn-collect-fine {
@@ -1093,6 +1136,70 @@
 .table-action-btn.btn-collect-fine:hover {
   background: var(--emerald-600);
   color: var(--white);
+}
+
+.table-action-btn.btn-delete-book {
+  background: var(--rose-50);
+  color: var(--rose-600);
+  border-color: var(--rose-100);
+}
+.table-action-btn.btn-delete-book:hover {
+  background: var(--rose-600);
+  color: var(--white);
+  border-color: var(--rose-600);
+}
+
+.delete-confirm-card {
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.delete-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--rose-50);
+  color: var(--rose-600);
+  border: 1px solid var(--rose-200);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+
+.delete-warning-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--rose-50);
+  border: 1px solid var(--rose-200);
+  border-radius: var(--radius-md);
+  color: var(--rose-800);
+  margin-bottom: 16px;
+}
+
+.delete-warning-banner .warning-icon {
+  flex-shrink: 0;
+  color: var(--rose-600);
+  margin-top: 2px;
+}
+
+.delete-warning-banner .warning-content strong {
+  display: block;
+  font-size: 13px;
+  color: var(--rose-800);
+  margin-bottom: 2px;
+}
+
+.delete-warning-banner .warning-content p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--rose-600);
+  line-height: 1.4;
 }
 
 /* ==========================================================================

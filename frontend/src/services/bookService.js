@@ -142,6 +142,115 @@ export async function createBook(bookData) {
 }
 
 /**
+ * Update an existing book in the database.
+ * Endpoint: PUT /api/books/{id}
+ * @param {number|string} id - Book ID
+ * @param {Object} bookData - { title, author, totalCopies, availableCopies }
+ * @returns {Promise<Object>} Updated book
+ */
+export async function updateBook(id, bookData) {
+  const payload = {
+    id: Number(id),
+    title: bookData.title ? bookData.title.trim() : '',
+    author: bookData.author ? bookData.author.trim() : '',
+    totalCopies: Number(bookData.totalCopies),
+    availableCopies: bookData.availableCopies !== undefined && bookData.availableCopies !== ''
+      ? Number(bookData.availableCopies)
+      : Number(bookData.totalCopies),
+  };
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/books/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      let errorMsg = `Failed to update book (Status ${response.status})`;
+      let errorDetail = null;
+      try {
+        errorDetail = await response.json();
+        if (errorDetail?.message) {
+          errorMsg = errorDetail.message;
+        }
+      } catch {
+        // Fallback
+      }
+
+      const error = new Error(errorMsg);
+      error.status = response.status;
+      error.data = errorDetail;
+      throw error;
+    }
+
+    return await response.json();
+  } catch (err) {
+    if (err.status) {
+      throw err;
+    }
+    const connErr = new Error(`Cannot reach backend at ${API_BASE_URL}. Ensure Spring Boot is running with active MySQL connection.`);
+    connErr.isNetworkError = true;
+    connErr.original = err;
+    throw connErr;
+  }
+}
+
+/**
+ * Delete a book by ID from the database.
+ * Endpoint: DELETE /api/books/{id}
+ * @param {number|string} id - Book ID
+ * @returns {Promise<Object>} Deletion result
+ */
+export async function deleteBook(id) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/books/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      let errorMsg = `Failed to delete book (Status ${response.status})`;
+      try {
+        const errorDetail = await response.json();
+        if (errorDetail?.message) {
+          errorMsg = errorDetail.message;
+        }
+      } catch {
+        // Fallback
+      }
+
+      const error = new Error(errorMsg);
+      error.status = response.status;
+      throw error;
+    }
+
+    if (response.status === 204) {
+      return { success: true, id };
+    }
+
+    try {
+      return await response.json();
+    } catch {
+      return { success: true, id };
+    }
+  } catch (err) {
+    if (err.status) {
+      throw err;
+    }
+    const connErr = new Error(`Cannot reach backend at ${API_BASE_URL}. Ensure Spring Boot is running with active MySQL connection.`);
+    connErr.isNetworkError = true;
+    connErr.original = err;
+    throw connErr;
+  }
+}
+
+/**
  * Check backend health status.
  * Endpoint: GET /api/health
  * @returns {Promise<Object>} { status: 'UP', service: '...', timestamp: '...' }
