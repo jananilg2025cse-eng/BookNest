@@ -9,9 +9,13 @@ import com.booknest.backend.repository.MemberRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Service
 public class MemberService {
+
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private final MemberRepository memberRepository;
 
@@ -37,6 +41,7 @@ public class MemberService {
     }
 
     public Member addMember(Member member) {
+        normalizeMember(member);
         validateMember(member);
 
         if (memberRepository.existsById(member.getId())) {
@@ -45,10 +50,9 @@ public class MemberService {
             );
         }
 
-        member.setName(member.getName().trim());
         memberRepository.save(member);
 
-        return member;
+        return memberRepository.findById(member.getId()).orElse(member);
     }
 
     public Member updateMember(int id, Member member) {
@@ -58,6 +62,8 @@ public class MemberService {
             );
         }
 
+        member.setId(id);
+        normalizeMember(member);
         validateMember(member);
 
         if (!memberRepository.existsById(id)) {
@@ -66,12 +72,9 @@ public class MemberService {
             );
         }
 
-        member.setId(id);
-        member.setName(member.getName().trim());
-
         memberRepository.update(member);
 
-        return member;
+        return memberRepository.findById(id).orElse(member);
     }
 
     public void deleteMember(int id) {
@@ -126,5 +129,65 @@ public class MemberService {
                     "Member name cannot exceed 150 characters."
             );
         }
+
+        if (member.getEmail() == null || member.getEmail().trim().length() > 254
+            || !EMAIL_PATTERN.matcher(member.getEmail().trim()).matches()) {
+            throw new MemberValidationException(
+                "Enter a valid email address (maximum 254 characters)."
+            );
+        }
+
+        if (!"Student".equals(member.getRole())
+            && !"Faculty & Staff".equals(member.getRole())) {
+            throw new MemberValidationException(
+                "Role must be Student or Faculty & Staff."
+            );
+        }
+
+        if (member.getDepartment() == null
+            || member.getDepartment().trim().isEmpty()) {
+            throw new MemberValidationException(
+                "Department is required."
+            );
+        }
+
+        if (member.getDepartment().trim().length() > 150) {
+            throw new MemberValidationException(
+                "Department cannot exceed 150 characters."
+            );
+        }
+
+        if ("Student".equals(member.getRole())
+                && (member.getYearOfStudy() == null || member.getYearOfStudy() < 1
+                || member.getYearOfStudy() > 8)) {
+            throw new MemberValidationException(
+                    "Year of study must be a whole number from 1 to 8 for students."
+            );
+        }
+
+        if ("Faculty & Staff".equals(member.getRole())
+            && member.getYearOfStudy() != null) {
+            throw new MemberValidationException(
+                "Year of study only applies to students."
+            );
+        }
+        }
+
+        private void normalizeMember(Member member) {
+            if (member == null) {
+                return;
+            }
+            if (member.getName() != null) {
+                member.setName(member.getName().trim());
+            }
+            if (member.getEmail() != null) {
+                member.setEmail(member.getEmail().trim());
+            }
+            if (member.getRole() != null) {
+                member.setRole(member.getRole().trim());
+            }
+            if (member.getDepartment() != null) {
+                member.setDepartment(member.getDepartment().trim());
+            }
     }
 }

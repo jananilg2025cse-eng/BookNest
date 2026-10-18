@@ -3,7 +3,7 @@
  * Connects frontend React components to the Spring Boot backend REST API.
  */
 
-const API_BASE_URL = 'http://localhost:8080/api';
+const API_BASE_URL = '/api';
 
 /**
  * Fetch all books from the backend.

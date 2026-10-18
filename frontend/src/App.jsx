@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DemoNoticeBanner from './components/DemoNoticeBanner';
@@ -14,11 +14,15 @@ import {
   INITIAL_STATS,
   POPULAR_BOOKS,
   RECENT_ACTIVITIES,
-  MOCK_MEMBERS,
   MOCK_CIRCULATION,
   MOCK_FINES,
 } from './data/mockData';
+<<<<<<< HEAD
 import { fetchAllBooks, fetchBookById, createBook, updateBook, deleteBook } from './services/bookService';
+=======
+import { fetchAllBooks, fetchBookById, createBook } from './services/bookService';
+import { fetchAllMembers } from './services/memberService';
+>>>>>>> origin/main
 
 import './App.css';
 
@@ -34,7 +38,9 @@ export default function App() {
   const [books, setBooks] = useState([]);
   const [loadingBooks, setLoadingBooks] = useState(true);
   const [booksError, setBooksError] = useState(null);
-  const [members] = useState(MOCK_MEMBERS);
+  const [members, setMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [membersError, setMembersError] = useState('');
   const [circulation, setCirculation] = useState(MOCK_CIRCULATION);
   const [fines, setFines] = useState(MOCK_FINES);
 
@@ -52,6 +58,50 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [toast]);
+
+  const requestMembers = useCallback(async () => {
+    try {
+      return { members: await fetchAllMembers() };
+    } catch (error) {
+      console.error('Failed to load members from backend:', error);
+      return { error: error.message || 'Could not load members. Please check the backend.' };
+    }
+  }, []);
+
+  const refreshMembers = useCallback(async () => {
+    setMembersLoading(true);
+    setMembersError('');
+
+    const result = await requestMembers();
+    if (result.error) {
+      setMembersError(result.error);
+    } else {
+      setMembers(result.members);
+    }
+
+    setMembersLoading(false);
+    return !result.error;
+  }, [requestMembers]);
+
+  useEffect(() => {
+    let active = true;
+
+    requestMembers().then((result) => {
+      if (!active) return;
+      if (result.error) {
+        setMembersError(result.error);
+      } else {
+        setMembers(result.members);
+      }
+    }).finally(() => {
+      if (active) setMembersLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [requestMembers]);
+
 
   // Fetch books from Spring Boot API and update total holding metrics
   const loadBooks = async () => {
@@ -440,6 +490,9 @@ export default function App() {
             <MembersView
               members={members}
               searchQuery={searchQuery}
+              loading={membersLoading}
+              error={membersError}
+              onRefresh={refreshMembers}
             />
           )}
 
