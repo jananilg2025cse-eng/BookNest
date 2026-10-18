@@ -8,6 +8,8 @@ import {
   BookIcon,
   DatabaseIcon,
   CloseIcon,
+  EditIcon,
+  TrashIcon,
 } from '../components/Icons';
 
 export default function BooksView({
@@ -16,6 +18,8 @@ export default function BooksView({
   error = null,
   onRefresh,
   onInspectBook,
+  onEditBook,
+  onDeleteBook,
   searchQuery = '',
   onAddBookSubmit,
 }) {
@@ -422,15 +426,35 @@ export default function BooksView({
                         </span>
                       </td>
                       <td className="text-right">
-                        <button
-                          type="button"
-                          className="table-action-btn"
-                          onClick={() => onInspectBook(book)}
-                          title="Inspect book details"
-                        >
-                          <BookmarkIcon size={14} />
-                          <span>Inspect</span>
-                        </button>
+                        <div className="table-actions-inline">
+                          <button
+                            type="button"
+                            className="table-action-btn"
+                            onClick={() => onInspectBook(book)}
+                            title="Inspect book details"
+                          >
+                            <BookmarkIcon size={14} />
+                            <span>Inspect</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="table-action-btn btn-edit-book"
+                            onClick={() => onEditBook && onEditBook(book)}
+                            title={`Edit ${book.title}`}
+                          >
+                            <EditIcon size={14} />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="table-action-btn btn-delete-book"
+                            onClick={() => onDeleteBook && onDeleteBook(book)}
+                            title={`Delete ${book.title}`}
+                          >
+                            <TrashIcon size={14} />
+                            <span>Delete</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

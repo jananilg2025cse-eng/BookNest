@@ -1,5 +1,6 @@
 package com.booknest.backend.controller;
 
+import com.booknest.backend.exception.BookNotFoundException;
 import com.booknest.backend.exception.BookValidationException;
 import com.booknest.backend.exception.DuplicateBookException;
 import com.booknest.backend.exception.GlobalExceptionHandler;
@@ -20,9 +21,14 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -166,5 +172,104 @@ class BookControllerTest {
                 .andExpect(jsonPath("$.error").value("Conflict"))
                 .andExpect(jsonPath("$.message").value("A book with ID 1 already exists."))
                 .andExpect(jsonPath("$.path").value("/api/books"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/books/{id} returns 200 OK for valid update")
+    void testUpdateBook_Success() throws Exception {
+        Book updatedBook = new Book(1, "Clean Code Updated", "Robert C. Martin", 10, 8);
+        when(bookService.updateBook(eq(1), any(Book.class))).thenReturn(updatedBook);
+
+        String jsonPayload = """
+                {
+                    "title": "Clean Code Updated",
+                    "author": "Robert C. Martin",
+                    "totalCopies": 10,
+                    "availableCopies": 8
+                }
+                """;
+
+        mockMvc.perform(put("/api/books/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.title").value("Clean Code Updated"))
+                .andExpect(jsonPath("$.author").value("Robert C. Martin"))
+                .andExpect(jsonPath("$.totalCopies").value(10))
+                .andExpect(jsonPath("$.availableCopies").value(8));
+    }
+
+    @Test
+    @DisplayName("PUT /api/books/{id} returns 404 NOT FOUND when book does not exist")
+    void testUpdateBook_NotFound() throws Exception {
+        when(bookService.updateBook(eq(99), any(Book.class)))
+                .thenThrow(new BookNotFoundException("Book with ID 99 not found."));
+
+        String jsonPayload = """
+                {
+                    "title": "Missing Book",
+                    "author": "Unknown",
+                    "totalCopies": 5,
+                    "availableCopies": 5
+                }
+                """;
+
+        mockMvc.perform(put("/api/books/99")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.message").value("Book with ID 99 not found."))
+                .andExpect(jsonPath("$.path").value("/api/books/99"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/books/{id} returns 400 BAD REQUEST when validation fails")
+    void testUpdateBook_ValidationFailure() throws Exception {
+        when(bookService.updateBook(eq(1), any(Book.class)))
+                .thenThrow(new BookValidationException("Available copies cannot exceed total copies."));
+
+        String jsonPayload = """
+                {
+                    "title": "Clean Code",
+                    "author": "Robert C. Martin",
+                    "totalCopies": 5,
+                    "availableCopies": 10
+                }
+                """;
+
+        mockMvc.perform(put("/api/books/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("Available copies cannot exceed total copies."))
+                .andExpect(jsonPath("$.path").value("/api/books/1"));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/books/{id} returns 204 NO CONTENT when book deleted")
+    void testDeleteBook_Success() throws Exception {
+        doNothing().when(bookService).deleteBook(1);
+
+        mockMvc.perform(delete("/api/books/1"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("DELETE /api/books/{id} returns 404 NOT FOUND when book does not exist")
+    void testDeleteBook_NotFound() throws Exception {
+        doThrow(new BookNotFoundException("Book with ID 99 not found."))
+                .when(bookService).deleteBook(99);
+
+        mockMvc.perform(delete("/api/books/99"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.message").value("Book with ID 99 not found."))
+                .andExpect(jsonPath("$.path").value("/api/books/99"));
     }
 }

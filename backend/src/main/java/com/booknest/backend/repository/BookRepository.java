@@ -53,4 +53,21 @@ public class BookRepository {
                 book.getAvailableCopies()
         );
     }
+
+    public int update(Book book) {
+        String sql = "UPDATE books SET title = ?, author = ?, total_copies = ?, available_copies = ? WHERE book_id = ?";
+        return jdbcTemplate.update(
+                sql,
+                book.getTitle(),
+                book.getAuthor(),
+                book.getTotalCopies(),
+                book.getAvailableCopies(),
+                book.getId()
+        );
+    }
+
+    public int deleteById(int id) {
+        String sql = "DELETE FROM books WHERE book_id = ?";
+        return jdbcTemplate.update(sql, id);
+    }
 }
