@@ -14,11 +14,11 @@ import {
   INITIAL_STATS,
   POPULAR_BOOKS,
   RECENT_ACTIVITIES,
-  MOCK_BOOKS_CATALOG,
   MOCK_MEMBERS,
   MOCK_CIRCULATION,
   MOCK_FINES,
 } from './data/mockData';
+import { fetchAllBooks, fetchBookById, createBook } from './services/bookService';
 
 import './App.css';
 
@@ -27,11 +27,13 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Core application data (stored in React state for demo interaction)
+  // Core application data
   const [stats, setStats] = useState(INITIAL_STATS);
   const [popularBooks] = useState(POPULAR_BOOKS);
   const [recentActivities, setRecentActivities] = useState(RECENT_ACTIVITIES);
-  const [books, setBooks] = useState(MOCK_BOOKS_CATALOG);
+  const [books, setBooks] = useState([]);
+  const [loadingBooks, setLoadingBooks] = useState(true);
+  const [booksError, setBooksError] = useState(null);
   const [members] = useState(MOCK_MEMBERS);
   const [circulation, setCirculation] = useState(MOCK_CIRCULATION);
   const [fines, setFines] = useState(MOCK_FINES);
@@ -51,6 +53,77 @@ export default function App() {
     }
   }, [toast]);
 
+  // Fetch books from Spring Boot API and update total holding metrics
+  const loadBooks = async () => {
+    try {
+      setLoadingBooks(true);
+      setBooksError(null);
+      const data = await fetchAllBooks();
+      setBooks(data);
+
+      const totalCopies = data.reduce((sum, b) => sum + (b.totalCopies || 0), 0);
+      setStats((prev) =>
+        prev.map((s) =>
+          s.id === 'total-books'
+            ? {
+                ...s,
+                value: totalCopies.toLocaleString(),
+                numericValue: totalCopies,
+                subtext: `${data.length} unique titles registered in MySQL`,
+              }
+            : s
+        )
+      );
+    } catch (err) {
+      console.error('Failed to load books from backend:', err);
+      setBooksError(err.message || 'Cannot reach Spring Boot API.');
+    } finally {
+      setLoadingBooks(false);
+    }
+  };
+
+  // Load books on initial application mount
+  useEffect(() => {
+    let ignore = false;
+
+    async function initialFetch() {
+      try {
+        const data = await fetchAllBooks();
+        if (!ignore) {
+          setBooks(data);
+          const totalCopies = data.reduce((sum, b) => sum + (b.totalCopies || 0), 0);
+          setStats((prev) =>
+            prev.map((s) =>
+              s.id === 'total-books'
+                ? {
+                    ...s,
+                    value: totalCopies.toLocaleString(),
+                    numericValue: totalCopies,
+                    subtext: `${data.length} unique titles registered in MySQL`,
+                  }
+                : s
+            )
+          );
+        }
+      } catch (err) {
+        if (!ignore) {
+          console.error('Failed to load books from backend:', err);
+          setBooksError(err.message || 'Cannot reach Spring Boot API.');
+        }
+      } finally {
+        if (!ignore) {
+          setLoadingBooks(false);
+        }
+      }
+    }
+
+    initialFetch();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   // Handler: Open Quick Issue Modal
   const handleOpenQuickIssue = (presetData = null) => {
     setModalType('quick-issue');
@@ -63,10 +136,16 @@ export default function App() {
     setModalData(null);
   };
 
-  // Handler: Inspect Book
-  const handleInspectBook = (book) => {
-    setModalType('inspect-book');
-    setModalData(book);
+  // Handler: Inspect Book (retrieves fresh book record from GET /api/books/{id})
+  const handleInspectBook = async (book) => {
+    try {
+      const freshBook = await fetchBookById(book.id);
+      setModalType('inspect-book');
+      setModalData(freshBook);
+    } catch {
+      setModalType('inspect-book');
+      setModalData(book);
+    }
   };
 
   // Handler: Open Collect Fine Modal
@@ -189,43 +268,20 @@ export default function App() {
     });
   };
 
-  // Handler: Add Book (in-memory demo)
-  const handleSubmitAddBook = (bookForm) => {
-    const newBookId = `BK-${Math.floor(2000 + Math.random() * 8000)}`;
-    const newBook = {
-      id: newBookId,
-      title: bookForm.title,
-      author: bookForm.author,
-      department: bookForm.department,
-      isbn: bookForm.isbn || `978-013${Math.floor(1000000 + Math.random() * 9000000)}`,
-      edition: 'Latest Edition',
-      rack: bookForm.rack || 'CS-01 / A',
-      totalCopies: bookForm.copies,
-      availableCopies: bookForm.copies,
-      status: 'Available',
-    };
+  // Handler: Add Book (persists to MySQL via POST /api/books)
+  const handleSubmitAddBook = async (bookForm) => {
+    const savedBook = await createBook(bookForm);
 
-    setBooks((prev) => [newBook, ...prev]);
-
-    // Increment total books stat
-    setStats((prev) =>
-      prev.map((s) =>
-        s.id === 'total-books'
-          ? {
-              ...s,
-              value: (s.numericValue + bookForm.copies).toLocaleString(),
-              numericValue: s.numericValue + bookForm.copies,
-            }
-          : s
-      )
-    );
+    // Refresh books list from backend
+    await loadBooks();
 
     setModalType(null);
     setToast({
-      title: 'Book Added (Demo)',
-      message: `"${bookForm.title}" added to ${bookForm.department} stacks.`,
+      title: 'Book Added (MySQL)',
+      message: `"${savedBook.title}" (ID #${savedBook.id}) saved to MySQL database.`,
       type: 'success',
     });
+    return savedBook;
   };
 
   // Handler: Collect Fine (in-memory demo)
@@ -318,9 +374,13 @@ export default function App() {
           {activeTab === 'books' && (
             <BooksView
               books={books}
+              loading={loadingBooks}
+              error={booksError}
+              onRefresh={loadBooks}
               onAddBook={handleOpenAddBook}
               onInspectBook={handleInspectBook}
               searchQuery={searchQuery}
+              onAddBookSubmit={handleSubmitAddBook}
             />
           )}
 

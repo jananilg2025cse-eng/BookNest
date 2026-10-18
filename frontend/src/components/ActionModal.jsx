@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CloseIcon, BookIcon, IssueReturnIcon, FinesIcon, CheckCircleIcon } from './Icons';
+import { CloseIcon, BookIcon, IssueReturnIcon, FinesIcon, CheckCircleIcon, AlertCircleIcon } from './Icons';
 
 export default function ActionModal({
   modalType,
@@ -13,20 +13,20 @@ export default function ActionModal({
   const [issueForm, setIssueForm] = useState({
     rollNumber: modalData?.rollNumber || '2023CSE042',
     studentName: modalData?.studentName || 'Aarav Sharma',
-    bookTitle: modalData?.bookTitle || 'Introduction to Algorithms (CLRS)',
+    bookTitle: modalData?.bookTitle || 'Introduction to Algorithms',
     isbn: modalData?.isbn || '978-0262046305',
     loanDays: '14',
   });
 
-  // State for Add Book form
+  // State for Add Book form (connected to Spring Boot POST /api/books)
   const [bookForm, setBookForm] = useState({
+    id: '',
     title: '',
     author: '',
-    department: 'Computer Science',
-    isbn: '',
-    rack: 'CS-06 / B',
-    copies: 5,
+    totalCopies: 5,
   });
+  const [addBookLoading, setAddBookLoading] = useState(false);
+  const [addBookError, setAddBookError] = useState(null);
 
   if (!modalType) return null;
 
@@ -36,10 +36,44 @@ export default function ActionModal({
     onSubmitIssue(issueForm);
   };
 
-  const handleBookSubmit = (e) => {
+  const handleBookSubmit = async (e) => {
     e.preventDefault();
-    if (!bookForm.title || !bookForm.author) return;
-    onSubmitAddBook(bookForm);
+    setAddBookError(null);
+
+    const idNum = parseInt(bookForm.id, 10);
+    const copiesNum = parseInt(bookForm.totalCopies, 10);
+
+    if (isNaN(idNum) || idNum <= 0) {
+      setAddBookError('Book ID must be a positive integer (e.g. 103).');
+      return;
+    }
+    if (!bookForm.title || !bookForm.title.trim()) {
+      setAddBookError('Book title cannot be blank.');
+      return;
+    }
+    if (!bookForm.author || !bookForm.author.trim()) {
+      setAddBookError('Book author cannot be blank.');
+      return;
+    }
+    if (isNaN(copiesNum) || copiesNum <= 0) {
+      setAddBookError('Total copies must be greater than zero.');
+      return;
+    }
+
+    try {
+      setAddBookLoading(true);
+      await onSubmitAddBook({
+        id: idNum,
+        title: bookForm.title.trim(),
+        author: bookForm.author.trim(),
+        totalCopies: copiesNum,
+      });
+      setBookForm({ id: '', title: '', author: '', totalCopies: 5 });
+    } catch (err) {
+      setAddBookError(err.message || 'Failed to save book to backend.');
+    } finally {
+      setAddBookLoading(false);
+    }
   };
 
   return (
@@ -164,13 +198,40 @@ export default function ActionModal({
 
           {modalType === 'add-book' && (
             <form onSubmit={handleBookSubmit} className="modal-form">
+              {addBookError && (
+                <div className="form-error-alert" role="alert">
+                  <AlertCircleIcon size={16} />
+                  <span>{addBookError}</span>
+                </div>
+              )}
+
               <div className="form-group">
-                <label htmlFor="book-title" className="form-label">Book Title</label>
+                <label htmlFor="book-id" className="form-label">
+                  Book ID (Unique Number) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  id="book-id"
+                  type="number"
+                  min="1"
+                  step="1"
+                  className="form-input mono"
+                  placeholder="e.g. 103"
+                  value={bookForm.id}
+                  onChange={(e) => setBookForm({ ...bookForm, id: e.target.value })}
+                  required
+                />
+                <span className="form-field-hint">Primary key in MySQL books table. Duplicate IDs will be rejected.</span>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="book-title" className="form-label">
+                  Book Title <span className="text-rose-500">*</span>
+                </label>
                 <input
                   id="book-title"
                   type="text"
                   className="form-input"
-                  placeholder="e.g. Distributed Systems: Concepts and Design"
+                  placeholder="e.g. Database System Concepts"
                   value={bookForm.title}
                   onChange={(e) => setBookForm({ ...bookForm, title: e.target.value })}
                   required
@@ -178,85 +239,55 @@ export default function ActionModal({
               </div>
 
               <div className="form-group">
-                <label htmlFor="book-author" className="form-label">Author(s)</label>
+                <label htmlFor="book-author" className="form-label">
+                  Author(s) <span className="text-rose-500">*</span>
+                </label>
                 <input
                   id="book-author"
                   type="text"
                   className="form-input"
-                  placeholder="e.g. George Coulouris, Jean Dollimore"
+                  placeholder="e.g. Abraham Silberschatz, Henry F. Korth"
                   value={bookForm.author}
                   onChange={(e) => setBookForm({ ...bookForm, author: e.target.value })}
                   required
                 />
               </div>
 
-              <div className="form-row-2">
-                <div className="form-group">
-                  <label htmlFor="book-dept" className="form-label">Department</label>
-                  <select
-                    id="book-dept"
-                    className="form-input"
-                    value={bookForm.department}
-                    onChange={(e) => setBookForm({ ...bookForm, department: e.target.value })}
-                  >
-                    <option value="Computer Science">Computer Science & IT</option>
-                    <option value="Electronics & Comm.">Electronics & Comm.</option>
-                    <option value="Mechanical">Mechanical Engineering</option>
-                    <option value="Civil">Civil Engineering</option>
-                    <option value="Basic Sciences">Basic Sciences & Humanities</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="book-rack" className="form-label">Shelf Rack Location</label>
-                  <input
-                    id="book-rack"
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. CS-04 / Shelf B"
-                    value={bookForm.rack}
-                    onChange={(e) => setBookForm({ ...bookForm, rack: e.target.value })}
-                  />
-                </div>
+              <div className="form-group">
+                <label htmlFor="book-copies" className="form-label">
+                  Total Copies <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  id="book-copies"
+                  type="number"
+                  min="1"
+                  className="form-input"
+                  placeholder="e.g. 5"
+                  value={bookForm.totalCopies}
+                  onChange={(e) => setBookForm({ ...bookForm, totalCopies: e.target.value })}
+                  required
+                />
+                <span className="form-field-hint">Initial available copies will match this count automatically.</span>
               </div>
 
-              <div className="form-row-2">
-                <div className="form-group">
-                  <label htmlFor="book-isbn" className="form-label">ISBN</label>
-                  <input
-                    id="book-isbn"
-                    type="text"
-                    className="form-input"
-                    placeholder="978-0132143011"
-                    value={bookForm.isbn}
-                    onChange={(e) => setBookForm({ ...bookForm, isbn: e.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="book-copies" className="form-label">Initial Copies</label>
-                  <input
-                    id="book-copies"
-                    type="number"
-                    min="1"
-                    max="50"
-                    className="form-input"
-                    value={bookForm.copies}
-                    onChange={(e) => setBookForm({ ...bookForm, copies: parseInt(e.target.value, 10) || 1 })}
-                  />
-                </div>
-              </div>
-
-              <div className="demo-notice-box">
-                <span className="demo-dot"></span>
-                <span>Note: Newly added books are displayed instantly in the catalogue for testing.</span>
+              <div className="live-api-badge-box">
+                <span className="live-pulse-dot"></span>
+                <span>Target: <code>POST http://localhost:8080/api/books</code> (Persisted in MySQL)</span>
               </div>
 
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={onClose}>
+                <button type="button" className="btn btn-secondary" onClick={onClose} disabled={addBookLoading}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  <CheckCircleIcon size={16} />
-                  <span>Add Book (Demo)</span>
+                <button type="submit" className="btn btn-primary" disabled={addBookLoading}>
+                  {addBookLoading ? (
+                    <span>Saving to Database...</span>
+                  ) : (
+                    <>
+                      <CheckCircleIcon size={16} />
+                      <span>Add Book to Catalog</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -265,18 +296,22 @@ export default function ActionModal({
           {modalType === 'inspect-book' && modalData && (
             <div className="inspect-details">
               <div className="inspect-header-card">
+                <div className="inspect-book-id-badge">Book #{modalData.id}</div>
                 <h4 className="inspect-book-title">{modalData.title}</h4>
-                <p className="inspect-book-author">By {modalData.author} • {modalData.edition || 'Latest Edition'}</p>
+                <p className="inspect-book-author">By {modalData.author}</p>
                 <div className="inspect-badges">
-                  <span className="dept-tag">{modalData.department}</span>
-                  <span className="shelf-location-tag">📍 {modalData.shelfLocation || modalData.rack}</span>
+                  <span className={`status-badge ${
+                    modalData.availableCopies === 0 ? 'badge-red' : modalData.availableCopies <= 2 ? 'badge-amber' : 'badge-green'
+                  }`}>
+                    {modalData.availableCopies === 0 ? 'Out of Stock' : modalData.availableCopies <= 2 ? 'Limited Copies' : 'Available'}
+                  </span>
                 </div>
               </div>
 
               <div className="inspect-grid">
                 <div className="inspect-item">
-                  <span className="inspect-label">ISBN-13</span>
-                  <span className="inspect-val mono">{modalData.isbn}</span>
+                  <span className="inspect-label">Database ID</span>
+                  <span className="inspect-val mono font-semibold">#{modalData.id}</span>
                 </div>
                 <div className="inspect-item">
                   <span className="inspect-label">Available Copies</span>
@@ -285,35 +320,18 @@ export default function ActionModal({
                   </span>
                 </div>
                 <div className="inspect-item">
-                  <span className="inspect-label">Stack Rack</span>
-                  <span className="inspect-val">{modalData.shelfLocation || modalData.rack}</span>
+                  <span className="inspect-label">Total Inventory</span>
+                  <span className="inspect-val font-semibold">{modalData.totalCopies} Copies</span>
                 </div>
                 <div className="inspect-item">
-                  <span className="inspect-label">Circulation Status</span>
-                  <span className="inspect-val text-green font-semibold">Active In Catalogue</span>
+                  <span className="inspect-label">Storage Backend</span>
+                  <span className="inspect-val text-green font-semibold">MySQL books table</span>
                 </div>
               </div>
 
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={onClose}>
                   Close
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => {
-                    onClose();
-                    onSubmitIssue({
-                      studentName: 'Aarav Sharma',
-                      rollNumber: '2023CSE042',
-                      bookTitle: modalData.title,
-                      isbn: modalData.isbn,
-                      loanDays: '14',
-                    });
-                  }}
-                >
-                  <IssueReturnIcon size={16} />
-                  <span>Issue This Book</span>
                 </button>
               </div>
             </div>
