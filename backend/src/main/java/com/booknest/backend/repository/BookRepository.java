@@ -1,0 +1,56 @@
+package com.booknest.backend.repository;
+
+import com.booknest.backend.model.Book;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public class BookRepository {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    private final RowMapper<Book> bookRowMapper = (rs, rowNum) -> new Book(
+            rs.getInt("book_id"),
+            rs.getString("title"),
+            rs.getString("author"),
+            rs.getInt("total_copies"),
+            rs.getInt("available_copies")
+    );
+
+    public BookRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public List<Book> findAll() {
+        String sql = "SELECT book_id, title, author, total_copies, available_copies FROM books ORDER BY book_id ASC";
+        return jdbcTemplate.query(sql, bookRowMapper);
+    }
+
+    public Optional<Book> findById(int id) {
+        String sql = "SELECT book_id, title, author, total_copies, available_copies FROM books WHERE book_id = ?";
+        List<Book> books = jdbcTemplate.query(sql, bookRowMapper, id);
+        return books.stream().findFirst();
+    }
+
+    public boolean existsById(int id) {
+        String sql = "SELECT COUNT(*) FROM books WHERE book_id = ?";
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, id);
+        return count != null && count > 0;
+    }
+
+    public int save(Book book) {
+        String sql = "INSERT INTO books (book_id, title, author, total_copies, available_copies) VALUES (?, ?, ?, ?, ?)";
+        return jdbcTemplate.update(
+                sql,
+                book.getId(),
+                book.getTitle(),
+                book.getAuthor(),
+                book.getTotalCopies(),
+                book.getAvailableCopies()
+        );
+    }
+}
