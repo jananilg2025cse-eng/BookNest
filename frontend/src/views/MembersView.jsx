@@ -1,59 +1,210 @@
-import React, { useState } from 'react';
 
-export default function MembersView({ members, searchQuery }) {
+import React, { useState } from 'react';
+import { AlertCircleIcon, CheckCircleIcon, CloseIcon, PlusIcon, UsersIcon } from '../components/Icons';
+import { createMember, deleteMember, updateMember } from '../services/memberService';
+
+export default function MembersView({
+  members = [],
+  searchQuery = '',
+  loading = false,
+  error = '',
+  onRefresh,
+}) {
+  const [formMode, setFormMode] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [formData, setFormData] = useState({
+    id: '',
+    name: '',
+    email: '',
+    role: '',
+    yearOfStudy: '',
+    department: '',
+  });
+  const [formError, setFormError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [roleFilter, setRoleFilter] = useState('All');
 
-  const filteredMembers = members.filter((m) => {
-    const matchesRole = roleFilter === 'All' || m.role === roleFilter;
-    if (!matchesRole) return false;
-
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      m.name.toLowerCase().includes(q) ||
-      m.rollNumber.toLowerCase().includes(q) ||
-      m.department.toLowerCase().includes(q) ||
-      m.email.toLowerCase().includes(q)
-    );
+  const query = searchQuery.trim().toLowerCase();
+  const roleFilteredMembers = roleFilter === 'All'
+    ? members
+    : members.filter((member) => member.role === roleFilter);
+  const filteredMembers = roleFilteredMembers.filter((member) => {
+    const name = String(member.name ?? '').toLowerCase();
+    const id = String(member.id ?? '').toLowerCase();
+    const email = String(member.email ?? '').toLowerCase();
+    return name.includes(query) || id.includes(query) || email.includes(query);
   });
+
+  const openAddForm = () => {
+    setFormData({ id: '', name: '', email: '', role: '', yearOfStudy: '', department: '' });
+    setEditingId(null);
+    setFormError('');
+    setActionError('');
+    setSuccessMessage('');
+    setFormMode('add');
+  };
+
+  const openEditForm = (member) => {
+    setFormData({
+      id: String(member.id),
+      name: member.name ?? '',
+      email: member.email ?? '',
+      role: member.role ?? '',
+      yearOfStudy: member.yearOfStudy == null ? '' : String(member.yearOfStudy),
+      department: member.department ?? '',
+    });
+    setEditingId(member.id);
+    setFormError('');
+    setActionError('');
+    setSuccessMessage('');
+    setFormMode('edit');
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setFormError('');
+
+    const id = formMode === 'edit' ? Number(editingId) : Number(formData.id);
+    const name = formData.name.trim();
+    const email = formData.email.trim();
+    const department = formData.department.trim();
+    const yearOfStudy = formData.role === 'Student'
+      ? Number(formData.yearOfStudy)
+      : null;
+
+    if (!Number.isInteger(id) || id <= 0) {
+      setFormError('Member ID must be a positive whole number.');
+      return;
+    }
+    if (!name) {
+      setFormError('Member name is required.');
+      return;
+    }
+    if (name.length > 150) {
+      setFormError('Member name cannot exceed 150 characters.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      setFormError('Enter a valid email address (maximum 254 characters).');
+      return;
+    }
+    if (!['Student', 'Faculty & Staff'].includes(formData.role)) {
+      setFormError('Choose Student or Faculty & Staff as the member role.');
+      return;
+    }
+    if (formData.role === 'Student'
+        && (!Number.isInteger(yearOfStudy) || yearOfStudy < 1 || yearOfStudy > 8)) {
+      setFormError('Student year of study must be a whole number from 1 to 8.');
+      return;
+    }
+    if (!department || department.length > 150) {
+      setFormError('Department is required and cannot exceed 150 characters.');
+      return;
+    }
+
+    try {
+      setFormSubmitting(true);
+      setActionError('');
+      setSuccessMessage('');
+
+      const member = {
+        id,
+        name,
+        email,
+        role: formData.role,
+        yearOfStudy,
+        department,
+      };
+      if (formMode === 'add') {
+        await createMember(member);
+      } else {
+        await updateMember(id, member);
+      }
+
+      setFormMode(null);
+      setSuccessMessage(formMode === 'add' ? 'Member added.' : 'Member updated.');
+      if (onRefresh && !(await onRefresh())) {
+        setActionError('The member was saved, but the list could not refresh. Use Refresh to try again.');
+      }
+    } catch (requestError) {
+      setFormError(requestError.message || 'Could not save this member.');
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (member) => {
+    if (!window.confirm(`Delete ${member.name} (ID ${member.id})? This cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingId(member.id);
+    setActionError('');
+    setSuccessMessage('');
+
+    try {
+      await deleteMember(member.id);
+      setSuccessMessage(`Member ${member.id} deleted.`);
+      if (onRefresh && !(await onRefresh())) {
+        setActionError('The member was deleted, but the list could not refresh. Use Refresh to try again.');
+      }
+    } catch (requestError) {
+      setActionError(requestError.message || 'Could not delete this member.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="tab-view-container">
       <div className="view-header-bar">
-        <div className="filter-pill-group">
-          <button
-            type="button"
-            className={`filter-btn ${roleFilter === 'All' ? 'active' : ''}`}
-            onClick={() => setRoleFilter('All')}
-          >
-            All Members ({members.length})
-          </button>
-          <button
-            type="button"
-            className={`filter-btn ${roleFilter === 'Student' ? 'active' : ''}`}
-            onClick={() => setRoleFilter('Student')}
-          >
-            Students
-          </button>
-          <button
-            type="button"
-            className={`filter-btn ${roleFilter === 'Faculty' ? 'active' : ''}`}
-            onClick={() => setRoleFilter('Faculty')}
-          >
-            Faculty & Staff
-          </button>
+        <div>
+          <div className="filter-pill-group">
+            <button type="button" className={`filter-btn ${roleFilter === 'All' ? 'active' : ''}`} onClick={() => setRoleFilter('All')}>
+              All Members ({members.length})
+            </button>
+            <button type="button" className={`filter-btn ${roleFilter === 'Student' ? 'active' : ''}`} onClick={() => setRoleFilter('Student')}>
+              Students ({members.filter((member) => member.role === 'Student').length})
+            </button>
+            <button type="button" className={`filter-btn ${roleFilter === 'Faculty & Staff' ? 'active' : ''}`} onClick={() => setRoleFilter('Faculty & Staff')}>
+              Faculty &amp; Staff ({members.filter((member) => member.role === 'Faculty & Staff').length})
+            </button>
+          </div>
+          <p className="card-subheading">Search by name, ID, or email. Books Issued counts active loans.</p>
         </div>
 
-        <span className="stock-pill stock-ok">Total Registered: 2,150 Members</span>
+        <div className="view-actions-cluster">
+          <span className="stock-pill stock-ok">Total Registered: {members.length} Members</span>
+          <button type="button" className="btn btn-primary" onClick={openAddForm}>
+            <PlusIcon size={16} />
+            <span>Add Member</span>
+          </button>
+        </div>
       </div>
 
       <div className="card">
         <div className="card-header-flex">
           <div>
             <h2 className="card-heading">College Membership Roster</h2>
-            <span className="card-subheading">Verified student and faculty library borrowing accounts</span>
+            <span className="card-subheading">Member details and current loan counts from the BookNest database.</span>
           </div>
         </div>
+
+        {successMessage && (
+          <div className="form-success-alert" role="status">
+            <CheckCircleIcon size={16} />
+            <span>{successMessage}</span>
+          </div>
+        )}
+        {actionError && (
+          <div className="form-error-alert" role="alert">
+            <AlertCircleIcon size={16} />
+            <span>{actionError}</span>
+          </div>
+        )}
 
         <div className="activity-table-wrapper">
           <table className="library-table">
@@ -61,46 +212,55 @@ export default function MembersView({ members, searchQuery }) {
               <tr>
                 <th scope="col">Roll / ID</th>
                 <th scope="col">Member Name</th>
-                <th scope="col">Role & Year</th>
+                <th scope="col">Role &amp; Year</th>
                 <th scope="col">Department</th>
                 <th scope="col">Books Issued</th>
-                <th scope="col">Account Status</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredMembers.map((member) => (
+              {loading ? (
+                <tr><td colSpan={6}>Loading members...</td></tr>
+              ) : error ? (
+                <tr><td colSpan={6} role="alert">{error}</td></tr>
+              ) : filteredMembers.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>
+                    {query
+                      ? 'No matching members found.'
+                      : 'No members registered yet.'}
+                  </td>
+                </tr>
+              ) : filteredMembers.map((member) => (
                 <tr key={member.id}>
+                  <td><span className="member-id-pill mono">{member.id}</span></td>
+                  <td><span className="member-name-bold">{member.name}</span></td>
                   <td>
-                    <span className="member-id-pill mono">{member.rollNumber}</span>
+                    {member.role
+                      ? `${member.role}${member.role === 'Student' && member.yearOfStudy ? ` · Year ${member.yearOfStudy}` : ''}`
+                      : '—'}
                   </td>
+                  <td>{member.department || '—'}</td>
+                  <td>{member.booksIssued ?? '—'}</td>
                   <td>
-                    <div className="member-name-block">
-                      <span className="member-name-bold">{member.name}</span>
-                      <span className="member-email-sub">{member.email}</span>
+                    <div className="view-actions-cluster">
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => openEditForm(member)}
+                        disabled={loading || deletingId === member.id}
+                      >
+                        Modify
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => handleDelete(member)}
+                        disabled={loading || deletingId === member.id}
+                      >
+                        {deletingId === member.id ? 'Deleting...' : 'Delete'}
+                      </button>
                     </div>
-                  </td>
-                  <td>
-                    <div className="role-block">
-                      <span className="role-tag">{member.role}</span>
-                      <span className="text-muted text-xs">{member.year}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <span className="dept-tag">{member.department}</span>
-                  </td>
-                  <td>
-                    <span className="books-count-badge">
-                      {member.booksIssued} {member.booksIssued === 1 ? 'Book' : 'Books'}
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={`status-badge ${
-                        member.status.includes('Suspended') ? 'badge-red' : 'badge-green'
-                      }`}
-                    >
-                      {member.status}
-                    </span>
                   </td>
                 </tr>
               ))}
@@ -110,9 +270,160 @@ export default function MembersView({ members, searchQuery }) {
 
         <div className="card-footer-note">
           <span className="data-disclaimer-dot"></span>
-          <span>Sample college member directory. Member authentication & barcode scanning will connect to Spring Security & Spring Boot.</span>
+          <span>Books Issued is calculated from issues that have not been returned.</span>
         </div>
       </div>
+
+      {formMode && (
+        <div className="modal-overlay" onClick={() => !formSubmitting && setFormMode(null)}>
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="member-form-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-title-flex">
+                <UsersIcon size={22} className="modal-header-icon" />
+                <div>
+                  <h2 className="modal-title" id="member-form-title">
+                    {formMode === 'add' ? 'Add Member' : 'Modify Member'}
+                  </h2>
+                  <p className="modal-subtitle">Save member details to the BookNest database.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setFormMode(null)}
+                disabled={formSubmitting}
+                aria-label="Close dialog"
+              >
+                <CloseIcon size={20} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <form className="modal-form" onSubmit={handleSubmit}>
+                {formError && (
+                  <div className="form-error-alert" role="alert">
+                    <AlertCircleIcon size={16} />
+                    <span>{formError}</span>
+                  </div>
+                )}
+                <div className="form-group">
+                  <label htmlFor="member-id" className="form-label">Member ID</label>
+                  <input
+                    id="member-id"
+                    type={formMode === 'add' ? 'number' : 'text'}
+                    min={formMode === 'add' ? '1' : undefined}
+                    step={formMode === 'add' ? '1' : undefined}
+                    className="form-input mono"
+                    value={formData.id}
+                    onChange={(event) => setFormData({ ...formData, id: event.target.value })}
+                    readOnly={formMode === 'edit'}
+                    required
+                  />
+                  {formMode === 'edit' && <span className="form-field-hint">Member ID cannot be changed.</span>}
+                </div>
+                <div className="form-group">
+                  <label htmlFor="member-name" className="form-label">Full Name</label>
+                  <input
+                    id="member-name"
+                    type="text"
+                    className="form-input"
+                    value={formData.name}
+                    onChange={(event) => setFormData({ ...formData, name: event.target.value })}
+                    maxLength={150}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="member-email" className="form-label">Email</label>
+                  <input
+                    id="member-email"
+                    type="email"
+                    className="form-input"
+                    value={formData.email}
+                    onChange={(event) => setFormData({ ...formData, email: event.target.value })}
+                    maxLength={254}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="member-role" className="form-label">Role</label>
+                  <select
+                    id="member-role"
+                    className="form-input"
+                    value={formData.role}
+                    onChange={(event) => setFormData({
+                      ...formData,
+                      role: event.target.value,
+                      yearOfStudy: event.target.value === 'Student' ? formData.yearOfStudy : '',
+                    })}
+                    required
+                  >
+                    <option value="" disabled>Select a role</option>
+                    <option value="Student">Student</option>
+                    <option value="Faculty & Staff">Faculty &amp; Staff</option>
+                  </select>
+                </div>
+                {formData.role === 'Student' && (
+                  <div className="form-group">
+                    <label htmlFor="member-year" className="form-label">Year of Study</label>
+                    <input
+                      id="member-year"
+                      type="number"
+                      className="form-input"
+                      min="1"
+                      max="8"
+                      step="1"
+                      value={formData.yearOfStudy}
+                      onChange={(event) => setFormData({ ...formData, yearOfStudy: event.target.value })}
+                      required
+                    />
+                  </div>
+                )}
+                <div className="form-group">
+                  <label htmlFor="member-department" className="form-label">Department</label>
+                  <input
+                    id="member-department"
+                    type="text"
+                    className="form-input"
+                    value={formData.department}
+                    onChange={(event) => setFormData({ ...formData, department: event.target.value })}
+                    maxLength={150}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="member-books-issued">Books Issued</label>
+                  <output id="member-books-issued" className="form-input">
+                    {formMode === 'edit'
+                      ? members.find((member) => member.id === editingId)?.booksIssued ?? '—'
+                      : 'Calculated after saving'}
+                  </output>
+                  <span className="form-field-hint">Derived from unreturned issue records and cannot be edited.</span>
+                </div>
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setFormMode(null)}
+                    disabled={formSubmitting}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={formSubmitting}>
+                    {formSubmitting ? 'Saving...' : formMode === 'add' ? 'Add Member' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
