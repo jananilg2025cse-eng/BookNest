@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { CloseIcon, BookIcon, IssueReturnIcon, FinesIcon, CheckCircleIcon, AlertCircleIcon, EditIcon, TrashIcon } from './Icons';
 
 export default function ActionModal({
   modalType,
   modalData,
+  members = [],
+  books = [],
   onClose,
   onSubmitIssue,
   onSubmitAddBook,
@@ -15,12 +17,12 @@ export default function ActionModal({
 }) {
   // State for Quick Issue form
   const [issueForm, setIssueForm] = useState({
-    rollNumber: modalData?.rollNumber || '2023CSE042',
-    studentName: modalData?.studentName || 'Aarav Sharma',
-    bookTitle: modalData?.bookTitle || 'Introduction to Algorithms',
-    isbn: modalData?.isbn || '978-0262046305',
+    memberId: String(modalData?.memberId ?? members[0]?.id ?? ''),
+    bookId: String(modalData?.bookId ?? books.find((book) => book.availableCopies > 0)?.id ?? ''),
     loanDays: '14',
   });
+  const [issueLoading, setIssueLoading] = useState(false);
+  const [issueError, setIssueError] = useState('');
 
   // State for Add Book form (connected to Spring Boot POST /api/books)
   const [bookForm, setBookForm] = useState({
@@ -34,11 +36,11 @@ export default function ActionModal({
 
   // State for Edit Book form (connected to Spring Boot PUT /api/books/{id})
   const [editForm, setEditForm] = useState({
-    id: '',
-    title: '',
-    author: '',
-    totalCopies: '',
-    availableCopies: '',
+    id: modalData?.id ?? '',
+    title: modalData?.title ?? '',
+    author: modalData?.author ?? '',
+    totalCopies: modalData?.totalCopies ?? '',
+    availableCopies: modalData?.availableCopies ?? '',
   });
   const [editBookLoading, setEditBookLoading] = useState(false);
   const [editBookError, setEditBookError] = useState(null);
@@ -47,29 +49,37 @@ export default function ActionModal({
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
 
-  // Sync edit form whenever modal opens or modalData changes
-  useEffect(() => {
-    if (modalType === 'edit-book' && modalData) {
-      setEditForm({
-        id: modalData.id ?? '',
-        title: modalData.title ?? '',
-        author: modalData.author ?? '',
-        totalCopies: modalData.totalCopies ?? '',
-        availableCopies: modalData.availableCopies ?? '',
-      });
-      setEditBookError(null);
-    }
-    if (modalType === 'delete-book') {
-      setDeleteError(null);
-    }
-  }, [modalType, modalData]);
-
   if (!modalType) return null;
 
-  const handleIssueSubmit = (e) => {
+  const availableBooks = books.filter((book) => book.availableCopies > 0);
+  const selectedMemberId = members.some((member) => String(member.id) === issueForm.memberId)
+    ? issueForm.memberId
+    : String(members[0]?.id ?? '');
+  const selectedBookId = availableBooks.some((book) => String(book.id) === issueForm.bookId)
+    ? issueForm.bookId
+    : String(availableBooks[0]?.id ?? '');
+
+  const handleIssueSubmit = async (e) => {
     e.preventDefault();
-    if (!issueForm.studentName || !issueForm.bookTitle) return;
-    onSubmitIssue(issueForm);
+    setIssueError('');
+
+    if (!selectedMemberId || !selectedBookId) {
+      setIssueError('Add at least one member and one available book before issuing.');
+      return;
+    }
+
+    try {
+      setIssueLoading(true);
+      await onSubmitIssue({
+        memberId: Number(selectedMemberId),
+        bookId: Number(selectedBookId),
+        loanDays: Number(issueForm.loanDays),
+      });
+    } catch (error) {
+      setIssueError(error.message || 'Could not issue this book.');
+    } finally {
+      setIssueLoading(false);
+    }
   };
 
   const handleBookSubmit = async (e) => {
@@ -216,80 +226,86 @@ export default function ActionModal({
         <div className="modal-body">
           {modalType === 'quick-issue' && (
             <form onSubmit={handleIssueSubmit} className="modal-form">
-              <div className="form-group">
-                <label htmlFor="issue-roll" className="form-label">Student Roll Number / Member ID</label>
-                <input
-                  id="issue-roll"
-                  type="text"
-                  className="form-input"
-                  value={issueForm.rollNumber}
-                  onChange={(e) => setIssueForm({ ...issueForm, rollNumber: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="issue-student" className="form-label">Student / Member Name</label>
-                <input
-                  id="issue-student"
-                  type="text"
-                  className="form-input"
-                  value={issueForm.studentName}
-                  onChange={(e) => setIssueForm({ ...issueForm, studentName: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="issue-title" className="form-label">Book Title</label>
-                <input
-                  id="issue-title"
-                  type="text"
-                  className="form-input"
-                  value={issueForm.bookTitle}
-                  onChange={(e) => setIssueForm({ ...issueForm, bookTitle: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="form-row-2">
-                <div className="form-group">
-                  <label htmlFor="issue-isbn" className="form-label">ISBN / Barcode</label>
-                  <input
-                    id="issue-isbn"
-                    type="text"
-                    className="form-input"
-                    value={issueForm.isbn}
-                    onChange={(e) => setIssueForm({ ...issueForm, isbn: e.target.value })}
-                  />
+              {issueError && (
+                <div className="form-error-alert" role="alert">
+                  <AlertCircleIcon size={16} />
+                  <span>{issueError}</span>
                 </div>
-                <div className="form-group">
-                  <label htmlFor="issue-days" className="form-label">Loan Duration</label>
-                  <select
-                    id="issue-days"
-                    className="form-input"
-                    value={issueForm.loanDays}
-                    onChange={(e) => setIssueForm({ ...issueForm, loanDays: e.target.value })}
-                  >
-                    <option value="14">14 Days (Standard Student)</option>
-                    <option value="30">30 Days (Extended Loan)</option>
-                    <option value="60">60 Days (Faculty Privilege)</option>
-                  </select>
-                </div>
+              )}
+              <div className="form-group">
+                <label htmlFor="issue-member" className="form-label">Member</label>
+                <select
+                  id="issue-member"
+                  className="form-input"
+                  value={selectedMemberId}
+                  onChange={(e) => setIssueForm({ ...issueForm, memberId: e.target.value })}
+                  disabled={members.length === 0 || issueLoading}
+                  required
+                >
+                  <option value="" disabled>Select a member</option>
+                  {members.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name} (ID {member.id})
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div className="demo-notice-box">
-                <span className="demo-dot"></span>
-                <span>Note: This simulates the circulation checkout in local state. No MySQL writes will be executed.</span>
+              <div className="form-group">
+                <label htmlFor="issue-book" className="form-label">Book</label>
+                <select
+                  id="issue-book"
+                  className="form-input"
+                  value={selectedBookId}
+                  onChange={(e) => setIssueForm({ ...issueForm, bookId: e.target.value })}
+                  disabled={!books.some((book) => book.availableCopies > 0) || issueLoading}
+                  required
+                >
+                  <option value="" disabled>Select an available book</option>
+                  {availableBooks.map((book) => (
+                    <option key={book.id} value={book.id}>
+                      {book.title} (ID {book.id}, {book.availableCopies} available)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="issue-days" className="form-label">Loan Duration</label>
+                <select
+                  id="issue-days"
+                  className="form-input"
+                  value={issueForm.loanDays}
+                  onChange={(e) => setIssueForm({ ...issueForm, loanDays: e.target.value })}
+                  disabled={issueLoading}
+                >
+                  <option value="14">14 Days (Standard)</option>
+                  <option value="30">30 Days (Extended)</option>
+                  <option value="60">60 Days (Faculty)</option>
+                </select>
+              </div>
+              {(members.length === 0 || !books.some((book) => book.availableCopies > 0)) && (
+                <span className="form-field-hint">
+                  Add a member and at least one available book before recording an issue.
+                </span>
+              )}
+
+              <div className="live-api-badge-box">
+                <span className="live-pulse-dot"></span>
+                <span>Issue records and available copy counts are saved to MySQL.</span>
               </div>
 
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={onClose}>
+                <button type="button" className="btn btn-secondary" onClick={onClose} disabled={issueLoading}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={issueLoading || members.length === 0 || !books.some((book) => book.availableCopies > 0)}
+                >
                   <CheckCircleIcon size={16} />
-                  <span>Confirm Issue (Demo)</span>
+                  <span>{issueLoading ? 'Issuing...' : 'Confirm Issue'}</span>
                 </button>
               </div>
             </form>

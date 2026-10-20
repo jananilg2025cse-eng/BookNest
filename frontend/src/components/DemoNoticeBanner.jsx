@@ -14,11 +14,11 @@ export default function DemoNoticeBanner() {
 
       <div className="banner-content">
         <div className="banner-headline">
-          <strong>Interactive Demo Mode:</strong> Realistic sample data loaded for preview.
+          <strong>BookNest Preview:</strong> Some dashboard panels still use sample data.
         </div>
         <p className="banner-description">
-          This frontend dashboard demonstrates BookNest's interface, workflows, and responsive layout.
-          Changes you make are kept in active memory. Full persistence with the Java Spring Boot + MySQL backend will be linked in upcoming milestones.
+          Books, members, and circulation issues are saved using the Spring Boot + MySQL backend.
+          Fine and activity panels may still display sample data.
         </p>
       </div>
 

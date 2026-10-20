@@ -14,15 +14,13 @@ import {
   INITIAL_STATS,
   POPULAR_BOOKS,
   RECENT_ACTIVITIES,
-  MOCK_CIRCULATION,
   MOCK_FINES,
 } from './data/mockData';
-<<<<<<< HEAD
+
 import { fetchAllBooks, fetchBookById, createBook, updateBook, deleteBook } from './services/bookService';
-=======
-import { fetchAllBooks, fetchBookById, createBook } from './services/bookService';
 import { fetchAllMembers } from './services/memberService';
->>>>>>> origin/main
+import { createIssue, fetchActiveIssues, returnIssue } from './services/issueService';
+
 
 import './App.css';
 
@@ -41,7 +39,9 @@ export default function App() {
   const [members, setMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersError, setMembersError] = useState('');
-  const [circulation, setCirculation] = useState(MOCK_CIRCULATION);
+  const [circulation, setCirculation] = useState([]);
+  const [circulationLoading, setCirculationLoading] = useState(true);
+  const [circulationError, setCirculationError] = useState('');
   const [fines, setFines] = useState(MOCK_FINES);
 
   // Modal & Toast notification states
@@ -82,6 +82,59 @@ export default function App() {
     setMembersLoading(false);
     return !result.error;
   }, [requestMembers]);
+
+  const requestCirculation = useCallback(async () => {
+    try {
+      return { issues: await fetchActiveIssues() };
+    } catch (error) {
+      console.error('Failed to load active issues from backend:', error);
+      return { error: error.message || 'Could not load active issues. Please check the backend.' };
+    }
+  }, []);
+
+  const refreshCirculation = useCallback(async () => {
+    setCirculationLoading(true);
+    setCirculationError('');
+    const result = await requestCirculation();
+
+    if (result.error) {
+      setCirculationError(result.error);
+    } else {
+      setCirculation(result.issues);
+      setStats((prev) =>
+        prev.map((stat) => stat.id === 'books-issued'
+          ? { ...stat, value: String(result.issues.length), numericValue: result.issues.length }
+          : stat)
+      );
+    }
+
+    setCirculationLoading(false);
+    return !result.error;
+  }, [requestCirculation]);
+
+  useEffect(() => {
+    let active = true;
+
+    requestCirculation().then((result) => {
+      if (!active) return;
+      if (result.error) {
+        setCirculationError(result.error);
+      } else {
+        setCirculation(result.issues);
+        setStats((prev) =>
+          prev.map((stat) => stat.id === 'books-issued'
+            ? { ...stat, value: String(result.issues.length), numericValue: result.issues.length }
+            : stat)
+        );
+      }
+    }).finally(() => {
+      if (active) setCirculationLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [requestCirculation]);
 
   useEffect(() => {
     let active = true;
@@ -124,9 +177,11 @@ export default function App() {
             : s
         )
       );
+      return true;
     } catch (err) {
       console.error('Failed to load books from backend:', err);
       setBooksError(err.message || 'Cannot reach Spring Boot API.');
+      return false;
     } finally {
       setLoadingBooks(false);
     }
@@ -222,118 +277,64 @@ export default function App() {
     setModalData(fine);
   };
 
-  // Handler: Submit Issue Book (in-memory demo)
-  const handleSubmitIssue = (formData) => {
-    const newTxnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
-    const today = new Date().toISOString().split('T')[0];
-    const dueDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-    const newLoan = {
-      id: newTxnId,
-      bookTitle: formData.bookTitle,
-      isbn: formData.isbn || '978-0262046305',
-      studentName: formData.studentName,
-      rollNumber: formData.rollNumber,
-      issuedDate: today,
-      dueDate: dueDate,
-      status: 'On Loan',
-      daysOverdue: 0,
-    };
-
-    // Update circulation records
-    setCirculation((prev) => [newLoan, ...prev]);
-
-    // Add activity record
-    const newActivity = {
-      id: `act-${Date.now()}`,
-      studentName: formData.studentName,
-      memberId: formData.rollNumber,
-      action: 'Issued Book',
-      bookTitle: formData.bookTitle,
-      isbn: formData.isbn || '978-0262046305',
-      timestamp: 'Just now',
-      type: 'issue',
-      badgeText: 'Issued',
-      dueDate: dueDate,
-    };
-    setRecentActivities((prev) => [newActivity, ...prev]);
-
-    // Increment books issued stat count
-    setStats((prev) =>
-      prev.map((s) =>
-        s.id === 'books-issued'
-          ? {
-              ...s,
-              value: String(s.numericValue + 1),
-              numericValue: s.numericValue + 1,
-            }
-          : s
-      )
-    );
-
+  // Handler: Submit Issue Book (persists issue record and inventory in MySQL)
+  const handleSubmitIssue = async (formData) => {
+    await createIssue(formData);
+    const [membersRefreshed, issuesRefreshed, booksRefreshed] = await Promise.all([
+      refreshMembers(),
+      refreshCirculation(),
+      loadBooks(),
+    ]);
     setModalType(null);
     setToast({
-      title: 'Book Issued (Demo)',
-      message: `"${formData.bookTitle}" checked out to ${formData.studentName}. Stored in local state.`,
-      type: 'success',
+      title: 'Book Issued',
+      message: membersRefreshed && issuesRefreshed && booksRefreshed
+        ? 'Issue recorded and member loan count updated.'
+        : 'Issue recorded. Some displayed data could not refresh; refresh the affected view.',
+      type: membersRefreshed && issuesRefreshed && booksRefreshed ? 'success' : 'error',
     });
   };
 
-  // Handler: Check-in / Return Book (in-memory demo)
-  const handleReturnBook = (loan) => {
-    // Remove from active loans
-    setCirculation((prev) => prev.filter((item) => item.id !== loan.id));
+  // Handler: Check-in / Return Book (persists return and inventory in MySQL)
+  const handleReturnBook = async (loan) => {
+    try {
+      await returnIssue(loan.id);
 
-    // Add return activity
-    const newActivity = {
-      id: `act-${Date.now()}`,
-      studentName: loan.studentName,
-      memberId: loan.rollNumber,
-      action: 'Returned Book',
-      bookTitle: loan.bookTitle,
-      isbn: loan.isbn,
-      timestamp: 'Just now',
-      type: 'return',
-      badgeText: 'Returned',
-      dueDate: loan.dueDate,
-    };
-    setRecentActivities((prev) => [newActivity, ...prev]);
+      const newActivity = {
+        id: `act-${Date.now()}`,
+        studentName: loan.studentName,
+        memberId: loan.rollNumber,
+        action: 'Returned Book',
+        bookTitle: loan.bookTitle,
+        isbn: `Book ID ${loan.bookId}`,
+        timestamp: 'Just now',
+        type: 'return',
+        badgeText: 'Returned',
+        dueDate: loan.dueDate,
+      };
+      setRecentActivities((prev) => [newActivity, ...prev]);
 
-    // Decrement books issued stat
-    setStats((prev) =>
-      prev.map((s) => {
-        if (s.id === 'books-issued') {
-          return {
-            ...s,
-            value: String(Math.max(0, s.numericValue - 1)),
-            numericValue: Math.max(0, s.numericValue - 1),
-          };
-        }
-        if (s.id === 'overdue-books' && loan.status === 'Overdue') {
-          return {
-            ...s,
-            value: String(Math.max(0, s.numericValue - 1)),
-            numericValue: Math.max(0, s.numericValue - 1),
-          };
-        }
-        return s;
-      })
-    );
+      const [membersRefreshed, issuesRefreshed, booksRefreshed] = await Promise.all([
+        refreshMembers(),
+        refreshCirculation(),
+        loadBooks(),
+      ]);
 
-    // Increment available copy count in catalogue if found
-    setBooks((prev) =>
-      prev.map((b) =>
-        b.title.toLowerCase() === loan.bookTitle.toLowerCase() || b.isbn === loan.isbn
-          ? { ...b, availableCopies: Math.min(b.totalCopies, b.availableCopies + 1) }
-          : b
-      )
-    );
-
-    setToast({
-      title: 'Book Returned (Demo)',
-      message: `Check-in recorded for "${loan.bookTitle}". Available inventory restocked.`,
-      type: 'success',
-    });
+      setToast({
+        title: 'Book Returned',
+        message: membersRefreshed && issuesRefreshed && booksRefreshed
+          ? `Return recorded for "${loan.bookTitle}".`
+          : 'Return recorded. Some displayed data could not refresh; refresh the affected view.',
+        type: membersRefreshed && issuesRefreshed && booksRefreshed ? 'success' : 'error',
+      });
+    } catch (error) {
+      console.error('Failed to return book:', error);
+      setToast({
+        title: 'Could Not Return Book',
+        message: error.message || 'The return could not be recorded.',
+        type: 'error',
+      });
+    }
   };
 
   // Handler: Add Book (persists to MySQL via POST /api/books)
@@ -465,7 +466,6 @@ export default function App() {
               onNavigateTab={(tab) => setActiveTab(tab)}
               onQuickIssue={() => handleOpenQuickIssue()}
               onAddBook={handleOpenAddBook}
-              onQuickReturnDemo={handleReturnBook}
               onInspectBook={handleInspectBook}
               searchQuery={searchQuery}
             />
@@ -499,8 +499,11 @@ export default function App() {
           {activeTab === 'circulation' && (
             <CirculationView
               circulation={circulation}
+              loading={circulationLoading}
+              error={circulationError}
               onOpenQuickIssue={() => handleOpenQuickIssue()}
               onReturnBook={handleReturnBook}
+              onRefresh={refreshCirculation}
               searchQuery={searchQuery}
             />
           )}
@@ -517,8 +520,11 @@ export default function App() {
 
       {/* Modal Dialog */}
       <ActionModal
+        key={modalType}
         modalType={modalType}
         modalData={modalData}
+        members={members}
+        books={books}
         onClose={() => setModalType(null)}
         onSubmitIssue={handleSubmitIssue}
         onSubmitAddBook={handleSubmitAddBook}

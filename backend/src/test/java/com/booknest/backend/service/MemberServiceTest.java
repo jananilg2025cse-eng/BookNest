@@ -77,6 +77,34 @@ class MemberServiceTest {
     }
 
     @Test
+    void acceptsAndPersistsBooksIssuedCount() {
+        Member savedMember = new Member(
+                105, "Nila Das", "nila@example.edu", "Student", 1,
+                "Math", 6
+        );
+        when(memberRepository.existsById(105)).thenReturn(false);
+        when(memberRepository.findById(105)).thenReturn(Optional.of(savedMember));
+
+        Member result = memberService.addMember(new Member(
+                105, "Nila Das", "nila@example.edu", "Student", 1,
+                "Math", 6
+        ));
+
+        assertEquals(6, result.getBooksIssued());
+        verify(memberRepository).save(argThat(member -> member.getBooksIssued() == 6));
+    }
+
+    @Test
+    void rejectsNegativeBooksIssuedCount() {
+        assertThrows(MemberValidationException.class, () -> memberService.addMember(
+                new Member(105, "Nila Das", "nila@example.edu", "Student", 1,
+                        "Math", -1)
+        ));
+
+        verifyNoInteractions(memberRepository);
+    }
+
+    @Test
     void rejectsInvalidEmailBeforeWriting() {
         assertThrows(MemberValidationException.class, () -> memberService.addMember(
                 new Member(104, "Name", "not-an-email", "Student", 1, "Math", 0)

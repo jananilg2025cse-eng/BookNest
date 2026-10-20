@@ -42,6 +42,9 @@ public class MemberService {
 
     public Member addMember(Member member) {
         normalizeMember(member);
+        if (member != null && member.getBooksIssued() == null) {
+            member.setBooksIssued(0);
+        }
         validateMember(member);
 
         if (memberRepository.existsById(member.getId())) {
@@ -176,6 +179,11 @@ public class MemberService {
         private void normalizeMember(Member member) {
             if (member == null) {
                 return;
+            }
+            if (member.getBooksIssued() != null && member.getBooksIssued() < 0) {
+                throw new MemberValidationException(
+                        "Books issued cannot be less than zero."
+                );
             }
             if (member.getName() != null) {
                 member.setName(member.getName().trim());

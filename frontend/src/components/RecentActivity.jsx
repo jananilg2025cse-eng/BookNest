@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ClockIcon, CheckCircleIcon, OverdueIcon, IssueReturnIcon, FinesIcon } from './Icons';
 
-export default function RecentActivity({ activities, onQuickReturnDemo, searchQuery = '' }) {
+export default function RecentActivity({ activities, searchQuery = '' }) {
   const [filterType, setFilterType] = useState('all');
 
   const filteredActivities = activities.filter((item) => {
@@ -140,14 +140,7 @@ export default function RecentActivity({ activities, onQuickReturnDemo, searchQu
                     </td>
                     <td className="text-right">
                       {act.type === 'issue' ? (
-                        <button
-                          type="button"
-                          className="table-action-btn"
-                          onClick={() => onQuickReturnDemo(act)}
-                          title="Simulate check-in"
-                        >
-                          Check In
-                        </button>
+                        <span className="text-muted text-xs">Demo record</span>
                       ) : (
                         <span className="text-muted text-xs">—</span>
                       )}

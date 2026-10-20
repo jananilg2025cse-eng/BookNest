@@ -76,13 +76,15 @@ class MemberControllerTest {
                                   "email": "morgan@example.edu",
                                   "role": "Faculty & Staff",
                                   "yearOfStudy": null,
-                                  "department": "Library"
+                                  "department": "Library",
+                                  "booksIssued": 4
                                 }
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.email").value("morgan@example.edu"))
                 .andExpect(jsonPath("$.role").value("Faculty & Staff"))
-                .andExpect(jsonPath("$.department").value("Library"));
+                .andExpect(jsonPath("$.department").value("Library"))
+                .andExpect(jsonPath("$.booksIssued").value(4));
     }
 
     @Test

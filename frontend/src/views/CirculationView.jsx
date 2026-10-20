@@ -3,8 +3,11 @@ import { PlusIcon, CheckCircleIcon } from '../components/Icons';
 
 export default function CirculationView({
   circulation,
+  loading = false,
+  error = '',
   onOpenQuickIssue,
   onReturnBook,
+  onRefresh,
   searchQuery,
 }) {
   const [statusFilter, setStatusFilter] = useState('All');
@@ -22,7 +25,7 @@ export default function CirculationView({
       item.bookTitle.toLowerCase().includes(q) ||
       item.studentName.toLowerCase().includes(q) ||
       item.rollNumber.toLowerCase().includes(q) ||
-      item.isbn.toLowerCase().includes(q)
+      String(item.bookId).includes(q)
     );
   });
 
@@ -59,7 +62,7 @@ export default function CirculationView({
           onClick={onOpenQuickIssue}
         >
           <PlusIcon size={16} />
-          <span>New Book Issue (Demo)</span>
+          <span>New Book Issue</span>
         </button>
       </div>
 
@@ -69,7 +72,12 @@ export default function CirculationView({
             <h2 className="card-heading">Active Circulation Ledger</h2>
             <span className="card-subheading">Currently checked-out books across campus</span>
           </div>
-          <span className="stock-pill stock-ok">Circulating: 546 Books</span>
+          <div className="view-actions-cluster">
+            <span className="stock-pill stock-ok">Circulating: {circulation.length} Books</span>
+            <button type="button" className="btn btn-secondary" onClick={onRefresh} disabled={loading}>
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
         <div className="activity-table-wrapper">
@@ -86,7 +94,11 @@ export default function CirculationView({
               </tr>
             </thead>
             <tbody>
-              {filteredLoans.length === 0 ? (
+              {loading ? (
+                <tr><td colSpan="7" className="text-center py-6 text-muted">Loading active issues...</td></tr>
+              ) : error ? (
+                <tr><td colSpan="7" className="text-center py-6 text-red" role="alert">{error}</td></tr>
+              ) : filteredLoans.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="text-center py-6 text-muted">
                     No active loan records match your search criteria.
@@ -104,7 +116,7 @@ export default function CirculationView({
                       <td>
                         <div className="book-cell">
                           <span className="book-title-main">{loan.bookTitle}</span>
-                          <span className="book-isbn-sub mono">ISBN: {loan.isbn}</span>
+                          <span className="book-isbn-sub mono">Book ID: {loan.bookId}</span>
                         </div>
                       </td>
                       <td>
@@ -146,7 +158,7 @@ export default function CirculationView({
                           type="button"
                           className="table-action-btn"
                           onClick={() => onReturnBook(loan)}
-                          title="Simulate check-in and inventory restock"
+                          title="Record book return and restock inventory"
                         >
                           <CheckCircleIcon size={14} />
                           <span>Check In</span>
@@ -162,7 +174,7 @@ export default function CirculationView({
 
         <div className="card-footer-note">
           <span className="data-disclaimer-dot"></span>
-          <span>Clicking 'Check In' simulates immediate return in local state for UI demonstration.</span>
+          <span>Active issues and returns are saved to the BookNest database. Member counts update from active issues.</span>
         </div>
       </div>
     </div>

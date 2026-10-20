@@ -12,6 +12,32 @@ import java.time.Instant;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(IssueValidationException.class)
+    public ResponseEntity<ErrorResponse> handleIssueValidationException(
+            IssueValidationException ex, HttpServletRequest request) {
+        ErrorResponse errorResponse = new ErrorResponse(
+                Instant.now(),
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
+    @ExceptionHandler(IssueNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleIssueNotFoundException(
+            IssueNotFoundException ex, HttpServletRequest request) {
+        ErrorResponse errorResponse = new ErrorResponse(
+                Instant.now(),
+                HttpStatus.NOT_FOUND.value(),
+                HttpStatus.NOT_FOUND.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+    }
+
     @ExceptionHandler(BookValidationException.class)
     public ResponseEntity<ErrorResponse> handleBookValidationException(BookValidationException ex, HttpServletRequest request) {
         ErrorResponse errorResponse = new ErrorResponse(

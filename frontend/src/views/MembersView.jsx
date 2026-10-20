@@ -19,6 +19,7 @@ export default function MembersView({
     role: '',
     yearOfStudy: '',
     department: '',
+    booksIssued: '0',
   });
   const [formError, setFormError] = useState('');
   const [actionError, setActionError] = useState('');
@@ -26,6 +27,8 @@ export default function MembersView({
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [roleFilter, setRoleFilter] = useState('All');
+  const [booksIssuedDrafts, setBooksIssuedDrafts] = useState({});
+  const [savingBooksIssuedId, setSavingBooksIssuedId] = useState(null);
 
   const query = searchQuery.trim().toLowerCase();
   const roleFilteredMembers = roleFilter === 'All'
@@ -39,7 +42,15 @@ export default function MembersView({
   });
 
   const openAddForm = () => {
-    setFormData({ id: '', name: '', email: '', role: '', yearOfStudy: '', department: '' });
+    setFormData({
+      id: '',
+      name: '',
+      email: '',
+      role: '',
+      yearOfStudy: '',
+      department: '',
+      booksIssued: '0',
+    });
     setEditingId(null);
     setFormError('');
     setActionError('');
@@ -55,6 +66,7 @@ export default function MembersView({
       role: member.role ?? '',
       yearOfStudy: member.yearOfStudy == null ? '' : String(member.yearOfStudy),
       department: member.department ?? '',
+      booksIssued: String(member.booksIssued ?? 0),
     });
     setEditingId(member.id);
     setFormError('');
@@ -71,6 +83,7 @@ export default function MembersView({
     const name = formData.name.trim();
     const email = formData.email.trim();
     const department = formData.department.trim();
+    const booksIssued = Number(formData.booksIssued);
     const yearOfStudy = formData.role === 'Student'
       ? Number(formData.yearOfStudy)
       : null;
@@ -104,6 +117,10 @@ export default function MembersView({
       setFormError('Department is required and cannot exceed 150 characters.');
       return;
     }
+    if (!Number.isInteger(booksIssued) || booksIssued < 0) {
+      setFormError('Books Issued must be a whole number greater than or equal to zero.');
+      return;
+    }
 
     try {
       setFormSubmitting(true);
@@ -117,6 +134,7 @@ export default function MembersView({
         role: formData.role,
         yearOfStudy,
         department,
+        booksIssued,
       };
       if (formMode === 'add') {
         await createMember(member);
@@ -133,6 +151,43 @@ export default function MembersView({
       setFormError(requestError.message || 'Could not save this member.');
     } finally {
       setFormSubmitting(false);
+    }
+  };
+
+  const handleBooksIssuedSave = async (member) => {
+    const draft = booksIssuedDrafts[member.id] ?? String(member.booksIssued ?? 0);
+    if (!draft.trim()) {
+      setActionError('Enter a whole number for Books Issued.');
+      return;
+    }
+    const booksIssued = Number(draft);
+    if (!Number.isInteger(booksIssued) || booksIssued < 0) {
+      setActionError('Books Issued must be a whole number greater than or equal to zero.');
+      return;
+    }
+
+    setSavingBooksIssuedId(member.id);
+    setActionError('');
+    setSuccessMessage('');
+
+    try {
+      await updateMember(member.id, {
+        ...member,
+        booksIssued,
+      });
+      setSuccessMessage(`Books Issued updated for member ${member.id}.`);
+      setBooksIssuedDrafts((drafts) => {
+        const nextDrafts = { ...drafts };
+        delete nextDrafts[member.id];
+        return nextDrafts;
+      });
+      if (onRefresh && !(await onRefresh())) {
+        setActionError('The count was saved, but the list could not refresh. Use Refresh to try again.');
+      }
+    } catch (requestError) {
+      setActionError(requestError.message || 'Could not update Books Issued.');
+    } finally {
+      setSavingBooksIssuedId(null);
     }
   };
 
@@ -173,7 +228,7 @@ export default function MembersView({
               Faculty &amp; Staff ({members.filter((member) => member.role === 'Faculty & Staff').length})
             </button>
           </div>
-          <p className="card-subheading">Search by name, ID, or email. Books Issued counts active loans.</p>
+          <p className="card-subheading">Edit Books Issued directly in the table; issue and return actions adjust the count too.</p>
         </div>
 
         <div className="view-actions-cluster">
@@ -189,7 +244,7 @@ export default function MembersView({
         <div className="card-header-flex">
           <div>
             <h2 className="card-heading">College Membership Roster</h2>
-            <span className="card-subheading">Member details and current loan counts from the BookNest database.</span>
+            <span className="card-subheading">Member details and editable book counts from the BookNest database.</span>
           </div>
         </div>
 
@@ -241,7 +296,32 @@ export default function MembersView({
                       : '—'}
                   </td>
                   <td>{member.department || '—'}</td>
-                  <td>{member.booksIssued ?? '—'}</td>
+                  <td>
+                    <div className="view-actions-cluster">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        required
+                        className="form-input mono"
+                        aria-label={`Books issued for ${member.name}`}
+                        value={booksIssuedDrafts[member.id] ?? String(member.booksIssued ?? 0)}
+                        onChange={(event) => setBooksIssuedDrafts((drafts) => ({
+                          ...drafts,
+                          [member.id]: event.target.value,
+                        }))}
+                        disabled={loading || savingBooksIssuedId === member.id}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => handleBooksIssuedSave(member)}
+                        disabled={loading || savingBooksIssuedId === member.id}
+                      >
+                        {savingBooksIssuedId === member.id ? 'Saving...' : 'Save'}
+                      </button>
+                    </div>
+                  </td>
                   <td>
                     <div className="view-actions-cluster">
                       <button
@@ -270,7 +350,7 @@ export default function MembersView({
 
         <div className="card-footer-note">
           <span className="data-disclaimer-dot"></span>
-          <span>Books Issued is calculated from issues that have not been returned.</span>
+          <span>Books Issued is editable here and also changes when a book is issued or returned.</span>
         </div>
       </div>
 
@@ -399,12 +479,17 @@ export default function MembersView({
                 </div>
                 <div className="form-group">
                   <label className="form-label" htmlFor="member-books-issued">Books Issued</label>
-                  <output id="member-books-issued" className="form-input">
-                    {formMode === 'edit'
-                      ? members.find((member) => member.id === editingId)?.booksIssued ?? '—'
-                      : 'Calculated after saving'}
-                  </output>
-                  <span className="form-field-hint">Derived from unreturned issue records and cannot be edited.</span>
+                  <input
+                    id="member-books-issued"
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="form-input"
+                    value={formData.booksIssued}
+                    onChange={(event) => setFormData({ ...formData, booksIssued: event.target.value })}
+                    required
+                  />
+                  <span className="form-field-hint">Enter the current number. New issues and returns will adjust this count.</span>
                 </div>
                 <div className="modal-actions">
                   <button

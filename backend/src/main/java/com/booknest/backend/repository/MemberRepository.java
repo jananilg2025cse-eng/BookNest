@@ -16,10 +16,7 @@ public class MemberRepository {
 
     private static final String MEMBER_SELECT = """
         SELECT m.member_id, m.name, m.email, m.role, m.year_of_study,
-           m.department,
-           (SELECT COUNT(*) FROM issue_records ir
-            WHERE ir.member_id = m.member_id AND ir.return_date IS NULL)
-               AS books_issued
+           m.department, m.books_issued
         FROM members m
         """;
 
@@ -57,8 +54,8 @@ public class MemberRepository {
 
     public int save(Member member) {
         String sql = "INSERT INTO members "
-            + "(member_id, name, email, role, year_of_study, department) "
-            + "VALUES (?, ?, ?, ?, ?, ?)";
+            + "(member_id, name, email, role, year_of_study, department, books_issued) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?)";
         return jdbcTemplate.update(
                 sql,
                 member.getId(),
@@ -66,13 +63,15 @@ public class MemberRepository {
             member.getEmail(),
             member.getRole(),
             member.getYearOfStudy(),
-            member.getDepartment()
+            member.getDepartment(),
+            member.getBooksIssued()
         );
     }
 
     public int update(Member member) {
         String sql = "UPDATE members SET name = ?, email = ?, role = ?, "
-            + "year_of_study = ?, department = ? WHERE member_id = ?";
+            + "year_of_study = ?, department = ?, "
+            + "books_issued = COALESCE(?, books_issued) WHERE member_id = ?";
         return jdbcTemplate.update(
                 sql,
                 member.getName(),
@@ -80,8 +79,20 @@ public class MemberRepository {
             member.getRole(),
             member.getYearOfStudy(),
             member.getDepartment(),
+            member.getBooksIssued(),
                 member.getId()
         );
+    }
+
+    public int incrementBooksIssued(int id) {
+        String sql = "UPDATE members SET books_issued = books_issued + 1 WHERE member_id = ?";
+        return jdbcTemplate.update(sql, id);
+    }
+
+    public int decrementBooksIssued(int id) {
+        String sql = "UPDATE members SET books_issued = GREATEST(books_issued - 1, 0) "
+                + "WHERE member_id = ?";
+        return jdbcTemplate.update(sql, id);
     }
 
     public int deleteById(int id) {
